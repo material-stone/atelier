@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>타이핑 디펜스</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --cyan: #00e5ff; --ice: #b4f5ff; --amber: #ffbe3c; --red: #ff405a;
+    --font: "Pretendard Variable", Pretendard, -apple-system, "Segoe UI", sans-serif;
+    --charge: 0;
+  }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #03060c; }
+  body { color: #e8fbff; font-family: var(--font); user-select: none; }
+  #game { position: fixed; inset: 0; display: block; }
+  #scan {
+    position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+    mix-blend-mode: multiply;
+  }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between;
+    align-items: flex-start; padding: 18px 26px; pointer-events: none;
+  }
+  .lbl { font-size: 11px; letter-spacing: .28em; color: rgba(180,245,255,.55); font-weight: 600; }
+  .val { font-size: 34px; font-weight: 800; letter-spacing: .02em; color: #fff;
+         text-shadow: 0 0 14px rgba(0,229,255,.7); font-variant-numeric: tabular-nums; }
+  .hud-r { text-align: right; }
+  .hud-r .lbl.sub { margin-top: 4px; }
+  #score.pop { animation: pop .22s ease-out; }
+  #level.pop { animation: pop .5s ease-out; color: var(--amber); }
+  @keyframes pop { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+  #combo { margin-top: 6px; font-size: 16px; font-weight: 800; color: var(--amber);
+           text-shadow: 0 0 12px rgba(255,190,60,.8); opacity: 0; transition: opacity .2s; }
+  #combo.on { opacity: 1; }
+  #combo.bump { animation: pop .18s ease-out; }
+  #lives { display: flex; gap: 8px; margin-top: 6px; }
+  .cell { width: 34px; height: 10px; transform: skewX(-20deg); background: var(--cyan);
+          box-shadow: 0 0 12px rgba(0,229,255,.9); transition: background .2s, box-shadow .2s; }
+  .cell.off { background: rgba(255,64,90,.18); box-shadow: none; outline: 1px solid rgba(255,64,90,.5); }
+  .hud-c { display: flex; flex-direction: column; align-items: center; }
+  #lives.hit { animation: shake .4s; }
+
+  #bombs { position: fixed; right: 26px; bottom: 26px; display: flex; flex-direction: column;
+           align-items: flex-end; gap: 8px; pointer-events: none; }
+  #bomb-row { display: flex; align-items: center; gap: 10px; }
+  kbd { font-family: var(--font); font-size: 11px; font-weight: 700; letter-spacing: .12em;
+        padding: 3px 7px; border: 1px solid rgba(180,245,255,.45); border-radius: 4px; color: var(--ice); }
+  .bomb { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,190,60,.35);
+          position: relative; transition: all .2s; }
+  .bomb.on { border-color: var(--amber); background: radial-gradient(circle at 40% 40%, #fff6d8, #ffbe3c 45%, #a5560d);
+             box-shadow: 0 0 16px rgba(255,190,60,.9); }
+  .bomb.new { animation: bombIn .6s cubic-bezier(.2,1.8,.4,1); }
+  @keyframes bombIn { 0% { transform: scale(2.6); filter: brightness(3); } 100% { transform: scale(1); } }
+  #bomb-bar { width: 106px; height: 3px; background: rgba(255,190,60,.18); }
+  #bomb-fill { height: 100%; width: 0; background: var(--amber); box-shadow: 0 0 8px var(--amber); transition: width .25s; }
+  #bombs.deny { animation: shake .3s; }
+
+  /* ---------- Input ---------- */
+  #input-wrap {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    width: min(520px, 76vw);
+  }
+  #input {
+    width: 100%; padding: 4px 6px 8px; background: transparent; border: none; outline: none;
+    border-bottom: 2px solid rgba(0,229,255,.45); border-radius: 0;
+    font-family: var(--font); font-size: 40px; font-weight: 700; letter-spacing: .06em;
+    text-align: center; color: #fff; caret-color: var(--cyan);
+    text-shadow: 0 0 18px rgba(0,229,255,.55); transition: border-color .15s;
+  }
+  #input::placeholder { color: rgba(180,245,255,.22); font-weight: 500; font-size: 26px; letter-spacing: .14em; }
+  #input:disabled { opacity: .35; }
+  #input-wrap::after {
+    content: ""; position: absolute; left: 50%; bottom: 0; height: 2px;
+    width: calc(var(--charge) * 100%); transform: translateX(-50%);
+    background: var(--amber); box-shadow: 0 0 14px 2px rgba(255,190,60,.8); transition: width .08s;
+  }
+  #input-wrap.bad #input { border-bottom-color: var(--red); color: #ffd0d6; text-shadow: 0 0 18px rgba(255,64,90,.8); }
+  #input-wrap.bad { animation: shakeX .26s; }
+  #input-wrap.fire #input { animation: fireFlash .25s ease-out; }
+  @keyframes fireFlash { 0% { text-shadow: 0 0 30px #fff, 0 0 60px var(--cyan); } 100% { text-shadow: 0 0 18px rgba(0,229,255,.55); } }
+  @keyframes shakeX {
+    0%,100% { transform: translateX(-50%); } 20% { transform: translateX(calc(-50% - 10px)); }
+    40% { transform: translateX(calc(-50% + 9px)); } 60% { transform: translateX(calc(-50% - 6px)); }
+    80% { transform: translateX(calc(-50% + 4px)); }
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); }
+    50% { transform: translateX(7px); } 75% { transform: translateX(-4px); }
+  }
+
+  /* ---------- Overlay ---------- */
+  #overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(3,10,20,.55), rgba(3,6,12,.9));
+    opacity: 0; pointer-events: none; transition: opacity .35s;
+  }
+  #overlay.show { opacity: 1; pointer-events: auto; }
+  .panel { text-align: center; padding: 34px 44px; max-width: 92vw; }
+  .eyebrow { font-size: 12px; letter-spacing: .5em; color: var(--cyan); font-weight: 700; }
+  .panel h1 { font-size: clamp(40px, 7vw, 76px); font-weight: 900; letter-spacing: .02em; margin: 10px 0 6px;
+              color: #fff; text-shadow: 0 0 24px rgba(0,229,255,.75), 0 0 2px #fff; }
+  .panel .sub { color: rgba(220,248,255,.7); font-size: 16px; line-height: 1.6; }
+  #ov-stats { display: flex; justify-content: center; gap: 34px; margin: 22px 0 4px; }
+  #ov-stats:empty { display: none; }
+  #ov-stats div { display: flex; flex-direction: column; gap: 2px; }
+  #ov-stats b { font-size: 30px; font-weight: 800; color: #fff; }
+  #ov-stats .rec b { color: var(--amber); text-shadow: 0 0 14px rgba(255,190,60,.8); }
+  #start {
+    margin-top: 26px; padding: 13px 46px; font-family: var(--font); font-size: 18px; font-weight: 800;
+    letter-spacing: .2em; color: #03131a; background: var(--cyan); border: none; cursor: pointer;
+    clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+    box-shadow: 0 0 28px rgba(0,229,255,.7); transition: transform .12s, filter .12s;
+  }
+  #start:hover { transform: scale(1.05); filter: brightness(1.15); }
+  .keys { margin-top: 22px; display: flex; gap: 22px; justify-content: center; flex-wrap: wrap;
+          font-size: 13px; color: rgba(220,248,255,.6); }
+  .keys span { display: flex; align-items: center; gap: 6px; }
+
+  #banner {
+    position: fixed; left: 0; right: 0; top: 34%; text-align: center; pointer-events: none;
+    font-size: clamp(34px, 6vw, 64px); font-weight: 900; letter-spacing: .14em; color: #fff;
+    text-shadow: 0 0 26px rgba(0,229,255,.9); opacity: 0;
+  }
+  #banner.show { animation: banner 1.3s ease-out forwards; }
+  #banner.warn { color: #ffd0d6; text-shadow: 0 0 26px rgba(255,64,90,.95); }
+  #banner.gold { color: #fff3d0; text-shadow: 0 0 26px rgba(255,190,60,.95); }
+  @keyframes banner {
+    0% { opacity: 0; transform: scale(1.8); letter-spacing: .5em; }
+    15% { opacity: 1; transform: scale(1); letter-spacing: .14em; }
+    75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px); }
+  }
+  body.capture #overlay, body.capture #banner { display: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="scan"></div>
+
+<div id="hud">
+  <div class="hud-l">
+    <div class="lbl">SCORE</div>
+    <div class="val" id="score">0</div>
+    <div id="combo"></div>
+  </div>
+  <div class="hud-c">
+    <div class="lbl">SHIELD</div>
+    <div id="lives"></div>
+  </div>
+  <div class="hud-r">
+    <div class="lbl">LEVEL</div>
+    <div class="val" id="level">1</div>
+    <div class="lbl sub">BEST <span id="best">0</span></div>
+  </div>
+</div>
+
+<div id="bombs">
+  <div id="bomb-row"><kbd>TAB</kbd><div id="bomb-icons"></div></div>
+  <div id="bomb-bar"><div id="bomb-fill"></div></div>
+</div>
+
+<div id="input-wrap">
+  <input id="input" type="text" placeholder="TYPE TO FIRE" autocomplete="off" autocapitalize="off"
+         autocorrect="off" spellcheck="false" lang="en" disabled>
+</div>
+
+<div id="banner"></div>
+
+<div id="overlay" class="show">
+  <div class="panel">
+    <div class="eyebrow" id="ov-eyebrow">ORBITAL DEFENSE GRID</div>
+    <h1 id="ov-title">TYPING DEFENSE</h1>
+    <p class="sub" id="ov-sub">떨어지는 단어를 정확히 입력하면 레이저 포탑이 요격합니다.<br>단어가 방어선에 닿으면 실드가 깎입니다.</p>
+    <div id="ov-stats"></div>
+    <button id="start">START</button>
+    <div class="keys">
+      <span><kbd>ENTER</kbd><kbd>ESC</kbd> 입력 지우기</span>
+      <span><kbd>TAB</kbd> 폭탄 · 500점마다 1개</span>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const CAPTURE = new URLSearchParams(location.search).has('capture');
+let seed = 20261101;
+const rand = CAPTURE
+  ? () => (seed = (seed * 16807) % 2147483647) / 2147483647
+  : Math.random;
+
+const RAW_WORDS = [
+  'apple','brave','cloud','dance','eagle','flame','grace','happy','ivory','juice','karma','lemon',
+  'magic','night','ocean','piano','quest','river','stone','tiger','ultra','vivid','water','xenon',
+  'yacht','zebra','alpha','blank','craft','dream','event','fresh','globe','hotel','input','joker',
+  'knife','laser','mango','noble','orbit','pixel','queen','radar','sugar','table','unity','vapor',
+  'witch','youth','zesty','pulse','vector','plasma','photon','quasar','nebula','rocket','signal',
+  'matrix','cipher','vortex','beacon','galaxy','comet','meteor','fusion','neutron','cosmic',
+  'android','reactor','shield','turret','sector','hyper','proton','zenith','nova','warp','drone',
+  'pilot','sonic','titan','flux','core','grid','byte','code','node','data','echo','orion','lunar',
+  'solar','astro','cyber','droid','storm','spark','blaze','frost','venom','omega','delta','sigma',
+  'gamma','kilo','mars','void','star','halo','beam','bolt','ion','jet','arc','zap','satellite',
+  'asteroid','hologram','starship','eclipse','gravity','horizon','phantom','quantum','sentinel'
+];
+// 다른 단어의 접두어인 단어는 자동 발사와 충돌하므로 뺀다.
+const WORDS = RAW_WORDS.filter((w, i, a) => a.indexOf(w) === i && !a.some(o => o !== w && o.startsWith(w)));
+
+const BOMB_STEP = 500, MAX_BOMBS = 3, MAX_LIVES = 3, KILLS_PER_LEVEL = 8;
+
+const C = {
+  cyan: [0, 229, 255], ice: [180, 245, 255], amber: [255, 190, 60], red: [255, 64, 90],
+  white: [255, 255, 255], blue: [70, 120, 255]
+};
+const rgba = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const easeOutBack = t => 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);
+const FONT = '"Pretendard Variable", Pretendard, sans-serif';
+
+const $ = id => document.getElementById(id);
+const cv = $('game'), ctx = cv.getContext('2d');
+const input = $('input'), inputWrap = $('input-wrap');
+
+/* ======================= Audio ======================= */
+const Sfx = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {
+    if (ac || CAPTURE) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -12; comp.knee.value = 6; comp.ratio.value = 5;
+    comp.attack.value = 0.002; comp.release.value = 0.12;
+    master = ac.createGain(); master.gain.value = 1.1;
+    master.connect(comp); comp.connect(ac.destination);
+  }
+  function getNoise() {
+    if (!noiseBuf) {
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return noiseBuf;
+  }
+  function env(g, t0, vol, att, dur) {
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + att);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  }
+  function tone({ type = 'square', f0, f1, dur, vol, att = 0.004, delay = 0 }) {
+    if (!ac) return;
+    const t0 = ac.currentTime + delay;
+    const osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f0, t0);
+    if (f1) osc.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    env(g, t0, vol, att, dur);
+    osc.connect(g); g.connect(master);
+    osc.start(t0); osc.stop(t0 + dur + 0.05);
+  }
+  function noise({ ft = 'lowpass', f0, f1, q = 0.8, dur, vol, att = 0.003, delay = 0 }) {
+    if (!ac) return;
+    const t0 = ac.currentTime + delay;
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = getNoise();
+    f.type = ft; f.Q.value = q;
+    f.frequency.setValueAtTime(f0, t0);
+    if (f1) f.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    env(g, t0, vol, att, dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t0, Math.random()); src.stop(t0 + dur + 0.05);
+  }
+  return {
+    init,
+    resume() { if (ac && ac.state === 'suspended') ac.resume(); },
+    key(n) {
+      const f = 520 * Math.pow(1.0595, Math.min(n, 16) * 1.5);
+      tone({ type: 'triangle', f0: f, dur: 0.06, vol: 0.28 });
+      tone({ type: 'square', f0: f * 2, dur: 0.025, vol: 0.06 });
+    },
+    error() {
+      tone({ type: 'square', f0: 170, f1: 110, dur: 0.16, vol: 0.3 });
+      tone({ type: 'sawtooth', f0: 178, f1: 115, dur: 0.16, vol: 0.18 });
+    },
+    clear() { noise({ ft: 'bandpass', f0: 4000, f1: 500, q: 1.4, dur: 0.14, vol: 0.4 }); },
+    laser() {
+      tone({ type: 'sawtooth', f0: 2600, f1: 140, dur: 0.24, vol: 0.42 });
+      tone({ type: 'square', f0: 1400, f1: 80, dur: 0.18, vol: 0.2 });
+      tone({ type: 'sine', f0: 3800, f1: 900, dur: 0.09, vol: 0.25 });
+      noise({ ft: 'highpass', f0: 4500, dur: 0.07, vol: 0.3 });
+    },
+    boom(size = 1) {
+      noise({ ft: 'lowpass', f0: 2600 * size, f1: 110, dur: 0.3 + 0.25 * size, vol: 0.55 + 0.25 * size, delay: 0.03 });
+      tone({ type: 'sine', f0: 170, f1: 36, dur: 0.25 + 0.2 * size, vol: 0.75, delay: 0.03 });
+    },
+    combo(n) {
+      const f = 660 * Math.pow(1.0595, Math.min(n, 30) % 12);
+      tone({ type: 'triangle', f0: f, dur: 0.12, vol: 0.18, delay: 0.06 });
+      tone({ type: 'triangle', f0: f * 1.5, dur: 0.14, vol: 0.14, delay: 0.11 });
+    },
+    breach() {
+      tone({ type: 'sine', f0: 120, f1: 26, dur: 0.8, vol: 1 });
+      noise({ ft: 'lowpass', f0: 1800, f1: 70, dur: 0.7, vol: 0.85 });
+      tone({ type: 'square', f0: 680, dur: 0.11, vol: 0.22, delay: 0.08 });
+      tone({ type: 'square', f0: 460, dur: 0.16, vol: 0.22, delay: 0.21 });
+    },
+    level() {
+      [523, 659, 784, 1047, 1319].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.18, vol: 0.3, delay: i * 0.06 }));
+      tone({ type: 'sawtooth', f0: 1047, dur: 0.35, vol: 0.1, delay: 0.32 });
+    },
+    bombGet() {
+      [880, 1175, 1568, 2093].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.3, vol: 0.3, delay: i * 0.07 }));
+    },
+    bomb() {
+      noise({ ft: 'highpass', f0: 300, f1: 7000, dur: 0.16, vol: 0.5 });
+      tone({ type: 'sawtooth', f0: 120, f1: 1800, dur: 0.14, vol: 0.25 });
+      tone({ type: 'sine', f0: 80, f1: 20, dur: 1.6, vol: 1, delay: 0.12 });
+      noise({ ft: 'lowpass', f0: 6000, f1: 50, dur: 1.4, vol: 1, delay: 0.12 });
+      tone({ type: 'sawtooth', f0: 320, f1: 35, dur: 0.9, vol: 0.35, delay: 0.12 });
+    },
+    empty() {
+      tone({ type: 'square', f0: 240, f1: 200, dur: 0.07, vol: 0.2 });
+      tone({ type: 'square', f0: 200, f1: 160, dur: 0.09, vol: 0.2, delay: 0.09 });
+    },
+    start() {
+      tone({ type: 'sawtooth', f0: 180, f1: 1800, dur: 0.4, vol: 0.22 });
+      [660, 990, 1320].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.2, vol: 0.25, delay: 0.3 + i * 0.07 }));
+    },
+    over() {
+      tone({ type: 'sawtooth', f0: 440, f1: 45, dur: 1.6, vol: 0.4 });
+      tone({ type: 'square', f0: 330, f1: 30, dur: 1.6, vol: 0.2, delay: 0.12 });
+      noise({ ft: 'lowpass', f0: 1200, f1: 60, dur: 1.4, vol: 0.6 });
+    }
+  };
+})();
+
+/* ======================= State ======================= */
+let W = 0, H = 0, DPR = 1, groundY = 0, wordFont = 22, turR = 40;
+const tur = { x: 0, y: 0 };
+let stars = [];
+
+const S = {
+  running: false, over: false, time: 0, score: 0, shownScore: 0, level: 1, kills: 0,
+  lives: MAX_LIVES, combo: 0, bestCombo: 0, bombs: 0, nextBombAt: BOMB_STEP,
+  words: [], particles: [], beams: [], rings: [], popups: [],
+  spawnT: 0, shake: 0, kick: { x: 0, y: 0 }, flash: 0, flashColor: C.white, hitstop: 0,
+  timeScale: 1, glitch: 0, groundHit: 0, aim: -Math.PI / 2, aimHold: 0, recoil: 0, charge: 0,
+  typed: '', lock: null
+};
+let best = 0;
+try { best = parseInt(localStorage.getItem('typing-best') || '0', 10) || 0; } catch (e) { /* 저장소 없음 */ }
+
+function resize() {
+  const oldW = W, oldGround = groundY;
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  groundY = H - clamp(H * 0.17, 104, 150);
+  turR = clamp(W / 24, 32, 56);
+  tur.x = W / 2; tur.y = groundY;
+  wordFont = Math.round(clamp(W / 54, 17, 26));
+  // 창 크기가 바뀌면 화면 위의 오브젝트도 같은 비율로 옮긴다.
+  if (oldW && oldGround) {
+    const sx = W / oldW, sy = groundY / oldGround;
+    for (const o of [...S.words, ...S.particles, ...S.rings, ...S.popups]) { o.x *= sx; o.y *= sy; }
+    for (const w of S.words) { w.vy *= sy; w.tw = measure(w.text); }
+    for (const b of S.beams) { b.x1 *= sx; b.y1 *= sy; b.x2 *= sx; b.y2 *= sy; }
+  }
+  stars = Array.from({ length: Math.round(W * H / 5000) }, () => ({
+    x: rand() * W, y: rand() * H, z: 0.2 + rand() * 0.8
+  }));
+}
+
+/* ======================= Words ======================= */
+function measure(text) {
+  ctx.font = `700 ${wordFont}px ${FONT}`;
+  return ctx.measureText(text).width;
+}
+
+function spawnWord() {
+  const maxLen = Math.min(9, 4 + S.level);
+  const active = new Set(S.words.map(w => w.text));
+  const firsts = new Set(S.words.map(w => w.text[0]));
+  let pool = WORDS.filter(w => w.length <= maxLen && !active.has(w) && !firsts.has(w[0]));
+  if (!pool.length) pool = WORDS.filter(w => !active.has(w));
+  const text = pool[Math.floor(rand() * pool.length)];
+  const tw = measure(text);
+  const half = tw / 2 + wordFont * 0.6 + 16;
+  let x = W / 2;
+  for (let i = 0; i < 8; i++) {
+    x = half + rand() * Math.max(1, W - half * 2);
+    if (!S.words.some(o => o.y < 120 && Math.abs(o.x - x) < half + o.tw / 2 + 30)) break;
+  }
+  const fallTime = Math.max(3.4, 11 - (S.level - 1) * 0.65) * (0.85 + rand() * 0.3);
+  S.words.push({ text, tw, x, y: -wordFont, vy: (groundY + wordFont) / fallTime, born: S.time, doomed: false, doomT: 0 });
+}
+
+function updateLock() {
+  S.lock = null;
+  if (!S.typed) return;
+  for (const w of S.words) {
+    if (!w.doomed && w.text.startsWith(S.typed) && (!S.lock || w.y > S.lock.y)) S.lock = w;
+  }
+}
+
+/* ======================= FX ======================= */
+function burst(x, y, color, n, power = 1) {
+  for (let i = 0; i < n; i++) {
+    const a = rand() * Math.PI * 2, sp = (80 + rand() * 520) * power;
+    S.particles.push({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3 + rand() * 0.5, t: 0, color, size: 1.5 + rand() * 2.5 });
+  }
+  for (let i = 0; i < n / 2; i++) {
+    const a = rand() * Math.PI * 2, sp = (30 + rand() * 160) * power;
+    S.particles.push({ kind: 'ember', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.5 + rand() * 0.7, t: 0, color, size: 2 + rand() * 4 });
+  }
+}
+
+function shatterText(w, color) {
+  ctx.font = `700 ${wordFont}px ${FONT}`;
+  let cx = w.x - w.tw / 2;
+  for (const ch of w.text) {
+    const cw = ctx.measureText(ch).width;
+    const a = -Math.PI / 2 + (rand() - 0.5) * 2.4, sp = 160 + rand() * 320;
+    S.particles.push({
+      kind: 'char', ch, x: cx + cw / 2, y: w.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      rot: 0, vr: (rand() - 0.5) * 18, life: 0.7 + rand() * 0.4, t: 0, color
+    });
+    cx += cw;
+  }
+}
+
+function ring(x, y, maxR, color, life = 0.45, width = 4) {
+  S.rings.push({ x, y, maxR, color, life, width, t: 0 });
+}
+
+function popup(x, y, text, color, size = 26, life = 0.9) {
+  S.popups.push({ x, y, text, color, size, life, t: 0 });
+}
+
+function addShake(amount, kx = 0, ky = 0) {
+  S.shake = Math.min(40, S.shake + amount);
+  S.kick.x += kx; S.kick.y += ky;
+}
+
+function flash(a, color = C.white) {
+  S.flash = Math.max(S.flash, a); S.flashColor = color;
+}
+
+function muzzle() {
+  const len = turR * 1.6;
+  return { x: tur.x + Math.cos(S.aim) * len, y: tur.y - turR * 0.18 + Math.sin(S.aim) * len };
+}
+
+/* ======================= Gameplay ======================= */
+function destroyByLaser(w) {
+  S.aim = Math.atan2(w.y - (tur.y - turR * 0.18), w.x - tur.x);
+  const m = muzzle();
+  S.beams.push({ x1: m.x, y1: m.y, x2: w.x, y2: w.y, t: 0, life: 0.3, color: C.cyan });
+  S.recoil = 1;
+  S.aimHold = 0.16;
+  S.words.splice(S.words.indexOf(w), 1);
+
+  S.combo++;
+  S.bestCombo = Math.max(S.bestCombo, S.combo);
+  const mult = 1 + Math.min(4, Math.floor(S.combo / 5)) * 0.5;
+  const pts = Math.round((5 + w.text.length) * S.level * mult);
+  addScore(pts);
+  S.kills++;
+
+  shatterText(w, C.cyan);
+  burst(w.x, w.y, C.cyan, 26 + w.text.length * 3);
+  burst(m.x, m.y, C.ice, 8, 0.4);
+  ring(w.x, w.y, 70 + w.text.length * 6, C.cyan);
+  ring(w.x, w.y, 34, C.white, 0.25, 8);
+  popup(w.x, w.y - wordFont, '+' + pts, mult > 1 ? C.amber : C.ice, mult > 1 ? 30 : 26);
+  const dx = w.x - tur.x, dy = w.y - tur.y, d = Math.hypot(dx, dy) || 1;
+  addShake(5 + w.text.length * 0.8, -dx / d * 5, -dy / d * 5);
+  flash(0.1, C.cyan);
+  S.hitstop = 0.045;
+
+  Sfx.laser(); Sfx.boom(0.6 + w.text.length * 0.06);
+  if (S.combo >= 5 && S.combo % 5 === 0) {
+    Sfx.combo(S.combo / 5);
+    popup(W / 2, groundY - turR * 3.2, `${S.combo} COMBO · x${mult.toFixed(1)}`, C.amber, 34, 1.1);
+  }
+  if (S.kills % KILLS_PER_LEVEL === 0) levelUp();
+
+  inputWrap.classList.remove('fire'); void inputWrap.offsetWidth; inputWrap.classList.add('fire');
+  updateHud(true);
+}
+
+function addScore(pts) {
+  S.score += pts;
+  while (S.score >= S.nextBombAt) {
+    S.nextBombAt += BOMB_STEP;
+    if (S.bombs < MAX_BOMBS) {
+      S.bombs++;
+      Sfx.bombGet();
+      popup(W - 90, H - 90, '+BOMB', C.amber, 28, 1.2);
+      showBanner('BOMB READY · TAB', 'gold');
+      renderBombs(true);
+    }
+  }
+}
+
+function levelUp() {
+  S.level++;
+  Sfx.level();
+  showBanner(`LEVEL ${S.level}`);
+  ring(tur.x, tur.y, Math.max(W, H), C.cyan, 0.9, 6);
+  flash(0.18, C.cyan);
+  const lv = $('level');
+  lv.classList.remove('pop'); void lv.offsetWidth; lv.classList.add('pop');
+}
+
+function breach(w) {
+  S.words.splice(S.words.indexOf(w), 1);
+  if (S.lock === w) { S.lock = null; }
+  S.lives--;
+  S.combo = 0;
+  S.groundHit = 1;
+  S.glitch = 0.35;
+  burst(w.x, groundY, C.red, 40, 1.2);
+  shatterText(w, C.red);
+  ring(w.x, groundY, 160, C.red, 0.5, 6);
+  addShake(26, 0, 14);
+  flash(0.4, C.red);
+  S.hitstop = 0.08;
+  Sfx.breach();
+  const lives = $('lives');
+  lives.classList.remove('hit'); void lives.offsetWidth; lives.classList.add('hit');
+  updateHud();
+  if (S.lives <= 0) gameOver();
+}
+
+function useBomb() {
+  if (!S.running) return;
+  if (S.bombs <= 0) {
+    Sfx.empty();
+    const b = $('bombs');
+    b.classList.remove('deny'); void b.offsetWidth; b.classList.add('deny');
+    return;
+  }
+  S.bombs--;
+  renderBombs();
+  clearInput(false);
+  Sfx.bomb();
+  flash(0.85, C.white);
+  S.hitstop = 0.14;
+  addShake(38, 0, 10);
+  ring(tur.x, tur.y, Math.hypot(W, H), C.amber, 1.0, 14);
+  ring(tur.x, tur.y, Math.hypot(W, H), C.white, 0.7, 4);
+  burst(tur.x, tur.y - turR, C.amber, 60, 1.6);
+  showBanner('PURGE', 'gold');
+  const waveSpeed = Math.hypot(W, H) / 1.0;
+  for (const w of S.words) {
+    if (w.doomed) continue;
+    w.doomed = true;
+    w.doomT = Math.hypot(w.x - tur.x, w.y - tur.y) / waveSpeed + 0.14;
+  }
+}
+
+function detonate(w) {
+  S.words.splice(S.words.indexOf(w), 1);
+  const pts = (5 + w.text.length) * S.level;
+  addScore(pts);
+  shatterText(w, C.amber);
+  burst(w.x, w.y, C.amber, 40, 1.3);
+  ring(w.x, w.y, 110, C.amber, 0.5, 6);
+  popup(w.x, w.y - wordFont, '+' + pts, C.amber, 26);
+  addShake(8);
+  Sfx.boom(1);
+  updateHud(true);
+}
+
+function clearInput(withSound = true) {
+  if (withSound && input.value) Sfx.clear();
+  input.value = '';
+  S.typed = '';
+  updateLock();
+}
+
+function onType() {
+  if (!S.running) { input.value = ''; return; }
+  const v = input.value.toLowerCase().replace(/[^a-z]/g, '');
+  if (v !== input.value) input.value = v;
+  const grew = v.length > S.typed.length;
+  S.typed = v;
+  updateLock();
+  if (!v) return;
+  const exact = S.words.find(w => !w.doomed && w.text === v);
+  if (exact) {
+    input.value = '';
+    S.typed = '';
+    destroyByLaser(exact);
+    updateLock();
+    return;
+  }
+  if (S.lock) {
+    inputWrap.classList.remove('bad');
+    if (grew) {
+      Sfx.key(v.length);
+      const m = muzzle();
+      burst(m.x, m.y, C.amber, 3, 0.25);
+    }
+  } else if (grew) {
+    Sfx.error();
+    inputWrap.classList.remove('bad'); void inputWrap.offsetWidth; inputWrap.classList.add('bad');
+    addShake(3);
+  }
+}
+
+/* ======================= Flow ======================= */
+function startGame() {
+  if (S.running) return;
+  Sfx.init(); Sfx.resume();
+  Object.assign(S, {
+    running: true, over: false, score: 0, shownScore: 0, level: 1, kills: 0, lives: MAX_LIVES,
+    combo: 0, bestCombo: 0, bombs: 0, nextBombAt: BOMB_STEP, words: [], spawnT: 0.4,
+    timeScale: 1, typed: '', lock: null
+  });
+  $('overlay').classList.remove('show');
+  input.disabled = false; input.value = ''; input.focus();
+  inputWrap.classList.remove('bad');
+  renderBombs();
+  updateHud();
+  Sfx.start();
+  showBanner('DEFEND');
+  ring(tur.x, tur.y, Math.max(W, H), C.cyan, 0.8, 5);
+}
+
+function gameOver() {
+  S.running = false;
+  S.over = true;
+  S.timeScale = 0.35;
+  input.disabled = true; input.value = '';
+  S.typed = ''; S.lock = null;
+  Sfx.over();
+  for (const w of S.words) { w.doomed = true; w.doomT = 0.1 + rand() * 0.6; w.red = true; }
+  const record = S.score > best;
+  if (record) {
+    best = S.score;
+    try { localStorage.setItem('typing-best', String(best)); } catch (e) { /* 저장소 없음 */ }
+  }
+  updateHud();
+  setTimeout(() => {
+    S.timeScale = 1;
+    $('ov-eyebrow').textContent = record ? 'NEW RECORD' : 'SHIELD DOWN';
+    $('ov-title').textContent = 'GAME OVER';
+    $('ov-sub').textContent = record ? '최고 기록을 갱신했습니다!' : '방어선이 무너졌습니다.';
+    $('ov-stats').innerHTML =
+      `<div class="${record ? 'rec' : ''}"><span class="lbl">SCORE</span><b>${S.score}</b></div>` +
+      `<div><span class="lbl">LEVEL</span><b>${S.level}</b></div>` +
+      `<div><span class="lbl">MAX COMBO</span><b>${S.bestCombo}</b></div>` +
+      `<div><span class="lbl">BEST</span><b>${best}</b></div>`;
+    $('start').textContent = 'RETRY';
+    $('overlay').classList.add('show');
+  }, 1400);
+}
+
+function showBanner(text, cls = '') {
+  const b = $('banner');
+  b.textContent = text;
+  b.className = cls;
+  void b.offsetWidth;
+  b.classList.add('show');
+}
+
+function renderBombs(fresh = false) {
+  $('bomb-icons').innerHTML = Array.from({ length: MAX_BOMBS }, (_, i) =>
+    `<span class="bomb ${i < S.bombs ? 'on' : ''} ${fresh && i === S.bombs - 1 ? 'new' : ''}"></span>`).join('');
+  $('bomb-icons').style.display = 'flex';
+  $('bomb-icons').style.gap = '6px';
+}
+
+function updateHud(scorePop = false) {
+  $('level').textContent = S.level;
+  $('best').textContent = best;
+  $('lives').innerHTML = Array.from({ length: MAX_LIVES }, (_, i) => `<span class="cell ${i < S.lives ? '' : 'off'}"></span>`).join('');
+  const combo = $('combo');
+  if (S.combo >= 2) {
+    const mult = 1 + Math.min(4, Math.floor(S.combo / 5)) * 0.5;
+    combo.textContent = `${S.combo} COMBO${mult > 1 ? ' · x' + mult.toFixed(1) : ''}`;
+    combo.classList.add('on');
+    combo.classList.remove('bump'); void combo.offsetWidth; combo.classList.add('bump');
+  } else combo.classList.remove('on');
+  const prog = S.bombs >= MAX_BOMBS ? 1 : 1 - (S.nextBombAt - S.score) / BOMB_STEP;
+  $('bomb-fill').style.width = (clamp(prog, 0, 1) * 100) + '%';
+  if (scorePop) {
+    const sc = $('score');
+    sc.classList.remove('pop'); void sc.offsetWidth; sc.classList.add('pop');
+  }
+}
+
+/* ======================= Update ======================= */
+function step(dt) {
+  S.time += dt;
+  let wdt = dt * S.timeScale;
+  if (S.hitstop > 0) { S.hitstop -= dt; wdt = 0; }
+
+  if (S.running && wdt > 0) {
+    S.spawnT -= wdt;
+    const maxWords = Math.min(10, 4 + S.level);
+    if (S.spawnT <= 0) {
+      if (S.words.filter(w => !w.doomed).length < maxWords) spawnWord();
+      S.spawnT = Math.max(0.6, 2.1 - (S.level - 1) * 0.15) * (0.75 + rand() * 0.5);
+    }
+  }
+  for (let i = S.words.length - 1; i >= 0; i--) {
+    const w = S.words[i];
+    if (w.doomed) {
+      w.doomT -= dt;
+      if (w.doomT <= 0) {
+        if (w.red) {
+          S.words.splice(i, 1);
+          shatterText(w, C.red); burst(w.x, w.y, C.red, 24); Sfx.boom(0.7);
+        } else detonate(w);
+      }
+      continue;
+    }
+    w.y += w.vy * wdt;
+    if (S.running && w.y + wordFont * 0.8 >= groundY) breach(w);
+  }
+
+  // 조준: 잠근 단어를 따라가고, 없으면 천천히 훑는다.
+  const target = S.lock
+    ? Math.atan2(S.lock.y - (tur.y - turR * 0.18), S.lock.x - tur.x)
+    : -Math.PI / 2 + Math.sin(S.time * 0.7) * 0.55;
+  S.aimHold = Math.max(0, S.aimHold - dt);
+  if (S.aimHold <= 0) S.aim += (target - S.aim) * Math.min(1, dt * (S.lock ? 16 : 3));
+  S.recoil = Math.max(0, S.recoil - dt * 5);
+  const wantCharge = S.lock ? S.typed.length / S.lock.text.length : 0;
+  S.charge += (wantCharge - S.charge) * Math.min(1, dt * 20);
+  document.documentElement.style.setProperty('--charge', S.charge.toFixed(3));
+
+  for (let i = S.particles.length - 1; i >= 0; i--) {
+    const p = S.particles[i];
+    p.t += dt;
+    if (p.t >= p.life) { S.particles.splice(i, 1); continue; }
+    const drag = p.kind === 'spark' ? 4 : 2;
+    p.vx *= Math.exp(-drag * dt); p.vy *= Math.exp(-drag * dt);
+    if (p.kind === 'char') p.vy += 700 * dt;
+    if (p.kind === 'ember') p.vy -= 30 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.rot !== undefined) p.rot += p.vr * dt;
+  }
+  for (const list of [S.beams, S.rings, S.popups]) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      list[i].t += dt;
+      if (list[i].t >= list[i].life) list.splice(i, 1);
+    }
+  }
+  for (const s of stars) {
+    s.y += s.z * (18 + S.level * 6) * dt * (S.running ? 1 : 0.5);
+    if (s.y > H) { s.y = 0; s.x = rand() * W; }
+  }
+  S.shake *= Math.exp(-dt * 9);
+  S.kick.x *= Math.exp(-dt * 14); S.kick.y *= Math.exp(-dt * 14);
+  S.flash *= Math.exp(-dt * 7);
+  S.glitch = Math.max(0, S.glitch - dt);
+  S.groundHit = Math.max(0, S.groundHit - dt * 2);
+
+  if (S.shownScore !== S.score) {
+    S.shownScore += Math.ceil((S.score - S.shownScore) * Math.min(1, dt * 12));
+    if (Math.abs(S.score - S.shownScore) < 1) S.shownScore = S.score;
+    $('score').textContent = S.shownScore;
+  }
+}
+
+/* ======================= Render ======================= */
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawBackground() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#02040a'); g.addColorStop(0.7, '#061322'); g.addColorStop(1, '#0a1c2e');
+  ctx.fillStyle = g;
+  ctx.fillRect(-60, -60, W + 120, H + 120);
+
+  for (const s of stars) {
+    ctx.fillStyle = rgba(C.ice, 0.25 + s.z * 0.6);
+    ctx.fillRect(s.x, s.y, s.z * 2, s.z * 2 + s.z * S.level * 0.8);
+  }
+
+  // 원근 그리드
+  ctx.save();
+  ctx.strokeStyle = rgba(C.cyan, 0.07);
+  ctx.lineWidth = 1;
+  const step = 56, off = (S.time * 14) % step;
+  for (let y = -step + off; y < groundY; y += step) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  for (let x = (W / 2) % step; x < W; x += step) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, groundY); ctx.stroke();
+  }
+  ctx.restore();
+
+  // 바닥 데크
+  const deck = ctx.createLinearGradient(0, groundY, 0, H);
+  deck.addColorStop(0, '#0b2233'); deck.addColorStop(1, '#03080f');
+  ctx.fillStyle = deck;
+  ctx.fillRect(-60, groundY, W + 120, H - groundY + 60);
+  ctx.strokeStyle = rgba(C.cyan, 0.08);
+  for (let i = -12; i <= 12; i++) {
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + i * 40, groundY);
+    ctx.lineTo(W / 2 + i * 160, H + 40);
+    ctx.stroke();
+  }
+}
+
+function drawShieldLine() {
+  const hit = S.groundHit;
+  const col = mix(C.cyan, C.red, hit);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const band = ctx.createLinearGradient(0, groundY - 46, 0, groundY);
+  band.addColorStop(0, rgba(col, 0));
+  band.addColorStop(1, rgba(col, 0.14 + hit * 0.35 + Math.sin(S.time * 3) * 0.03));
+  ctx.fillStyle = band;
+  ctx.fillRect(0, groundY - 46, W, 46);
+  ctx.shadowColor = rgba(col, 1);
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = rgba(col, 0.9);
+  ctx.lineWidth = 2 + hit * 3;
+  ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke();
+  // 스캔 펄스
+  const px = ((S.time * 0.35) % 1) * W;
+  const pg = ctx.createLinearGradient(px - 160, 0, px + 160, 0);
+  pg.addColorStop(0, rgba(C.white, 0)); pg.addColorStop(0.5, rgba(C.white, 0.7)); pg.addColorStop(1, rgba(C.white, 0));
+  ctx.strokeStyle = pg;
+  ctx.beginPath(); ctx.moveTo(px - 160, groundY); ctx.lineTo(px + 160, groundY); ctx.stroke();
+  ctx.restore();
+}
+
+function drawWord(w) {
+  const fs = wordFont;
+  const padX = fs * 0.6, h = fs * 1.7, bw = w.tw + padX * 2;
+  const danger = clamp((w.y - groundY * 0.5) / (groundY * 0.45), 0, 1);
+  const locked = w === S.lock;
+  const matching = S.typed && !w.doomed && w.text.startsWith(S.typed);
+  let col = locked ? C.amber : mix(C.cyan, C.red, danger);
+  if (w.doomed) col = w.red ? C.red : C.amber;
+  const blink = danger > 0.7 && !locked ? 0.55 + 0.45 * Math.sin(S.time * 18) : 1;
+  const k = easeOutBack(clamp((S.time - w.born) / 0.35, 0, 1));
+
+  ctx.save();
+  ctx.translate(w.x, w.y);
+  if (w.doomed) ctx.translate((rand() - 0.5) * 6, (rand() - 0.5) * 6);
+  ctx.scale(k, k);
+
+  // 낙하 궤적
+  const tg = ctx.createLinearGradient(0, -h / 2 - 70, 0, -h / 2);
+  tg.addColorStop(0, rgba(col, 0)); tg.addColorStop(1, rgba(col, 0.45));
+  ctx.strokeStyle = tg; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, -h / 2 - 70); ctx.lineTo(0, -h / 2); ctx.stroke();
+
+  ctx.fillStyle = `rgba(4,14,24,${0.82})`;
+  roundRect(-bw / 2, -h / 2, bw, h, 5);
+  ctx.fill();
+  ctx.shadowColor = rgba(col, 1);
+  ctx.shadowBlur = locked ? 26 : 14;
+  ctx.strokeStyle = rgba(col, 0.95 * blink);
+  ctx.lineWidth = locked ? 2.5 : 1.8;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // 글자: 입력된 접두어는 강조
+  ctx.font = `700 ${fs}px ${FONT}`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  let tx = -w.tw / 2;
+  const typedLen = matching ? S.typed.length : 0;
+  if (typedLen) {
+    const part = w.text.slice(0, typedLen);
+    ctx.fillStyle = locked ? '#ffe2a0' : rgba(C.ice, 0.9);
+    ctx.shadowColor = rgba(locked ? C.amber : C.cyan, 1);
+    ctx.shadowBlur = 12;
+    ctx.fillText(part, tx, 1);
+    tx += ctx.measureText(part).width;
+    ctx.shadowBlur = 0;
+  }
+  ctx.fillStyle = w.doomed ? '#fff' : (matching ? 'rgba(255,255,255,.55)' : '#f2fdff');
+  ctx.fillText(w.text.slice(typedLen), tx, 1);
+
+  // 잠금 레티클
+  if (locked) {
+    const pulse = 1 + Math.sin(S.time * 14) * 0.06;
+    const rx = bw / 2 + 10 * pulse, ry = h / 2 + 8 * pulse, c = 10;
+    ctx.strokeStyle = rgba(C.amber, 1);
+    ctx.shadowColor = rgba(C.amber, 1); ctx.shadowBlur = 10;
+    ctx.lineWidth = 2.5;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      ctx.beginPath();
+      ctx.moveTo(sx * rx, sy * (ry - c)); ctx.lineTo(sx * rx, sy * ry); ctx.lineTo(sx * (rx - c), sy * ry);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    ctx.font = `700 10px ${FONT}`;
+    ctx.fillStyle = rgba(C.amber, 0.9);
+    ctx.textAlign = 'center';
+    ctx.fillText('LOCK', 0, -ry - 9);
+  }
+  ctx.restore();
+}
+
+function drawLockLine() {
+  if (!S.lock) return;
+  const m = muzzle();
+  ctx.save();
+  ctx.setLineDash([4, 8]);
+  ctx.lineDashOffset = -S.time * 60;
+  ctx.strokeStyle = rgba(C.amber, 0.25 + S.charge * 0.45);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(S.lock.x, S.lock.y); ctx.stroke();
+  ctx.restore();
+}
+
+function drawTurret() {
+  const { x, y } = tur, r = turR;
+  ctx.save();
+
+  // 받침대
+  ctx.fillStyle = '#0c1b28';
+  ctx.strokeStyle = rgba(C.cyan, 0.6);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x - r * 1.5, y); ctx.lineTo(x + r * 1.5, y);
+  ctx.lineTo(x + r * 2.2, y + r * 0.6); ctx.lineTo(x - r * 2.2, y + r * 0.6);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  for (let i = -2; i <= 2; i++) {
+    const on = (Math.floor(S.time * 4) + i + 5) % 5 === 0;
+    ctx.fillStyle = rgba(on ? C.cyan : C.blue, on ? 1 : 0.35);
+    ctx.fillRect(x + i * r * 0.5 - 3, y + r * 0.3, 6, 3);
+  }
+
+  // 포신
+  const by = y - r * 0.18;
+  ctx.save();
+  ctx.translate(x, by);
+  ctx.rotate(S.aim);
+  const back = S.recoil * r * 0.35;
+  const bg = ctx.createLinearGradient(0, -r * 0.22, 0, r * 0.22);
+  bg.addColorStop(0, '#5b7f93'); bg.addColorStop(0.5, '#2b4a5c'); bg.addColorStop(1, '#122533');
+  ctx.fillStyle = bg;
+  ctx.strokeStyle = rgba(C.cyan, 0.9);
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = rgba(C.cyan, 0.8); ctx.shadowBlur = 10;
+  roundRect(r * 0.2 - back, -r * 0.22, r * 1.45, r * 0.44, 3);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#0b1822';
+  ctx.fillRect(r * 1.3 - back, -r * 0.3, r * 0.12, r * 0.6);
+  ctx.fillStyle = rgba(S.charge > 0 ? C.amber : C.cyan, 0.9);
+  ctx.fillRect(r * 0.45 - back, -r * 0.05, r * 0.8 * (0.3 + S.charge * 0.7), r * 0.1);
+  // 충전 광
+  const glow = 3 + S.charge * 9 + S.recoil * 9;
+  const tipX = r * 1.6 - back;
+  ctx.globalCompositeOperation = 'lighter';
+  const gg = ctx.createRadialGradient(tipX, 0, 0, tipX, 0, glow * 2.2);
+  const gc = S.recoil > 0.3 ? C.white : (S.charge > 0 ? C.amber : C.cyan);
+  gg.addColorStop(0, rgba(C.white, 0.95)); gg.addColorStop(0.3, rgba(gc, 0.8)); gg.addColorStop(1, rgba(gc, 0));
+  ctx.fillStyle = gg;
+  ctx.beginPath(); ctx.arc(tipX, 0, glow * 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // 돔
+  const dg = ctx.createLinearGradient(x, y - r, x, y);
+  dg.addColorStop(0, '#2a4a5e'); dg.addColorStop(1, '#0d1f2c');
+  ctx.fillStyle = dg;
+  ctx.shadowColor = rgba(C.cyan, 0.9); ctx.shadowBlur = 18;
+  ctx.beginPath(); ctx.arc(x, y, r, Math.PI, 0); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = rgba(C.cyan, 0.9); ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.strokeStyle = rgba(C.cyan, 0.3); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(x, y, r * 0.68, Math.PI, 0); ctx.stroke();
+  // 코어
+  const pulse = 0.6 + Math.sin(S.time * 4) * 0.2 + S.charge * 0.4;
+  ctx.globalCompositeOperation = 'lighter';
+  const cg = ctx.createRadialGradient(x, y - r * 0.35, 0, x, y - r * 0.35, r * 0.5);
+  const cc = S.charge > 0 ? C.amber : C.cyan;
+  cg.addColorStop(0, rgba(C.white, pulse)); cg.addColorStop(0.35, rgba(cc, pulse * 0.7)); cg.addColorStop(1, rgba(cc, 0));
+  ctx.fillStyle = cg;
+  ctx.beginPath(); ctx.arc(x, y - r * 0.35, r * 0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawBeams() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  for (const b of S.beams) {
+    const k = 1 - b.t / b.life;
+    const dx = b.x2 - b.x1, dy = b.y2 - b.y1, len = Math.hypot(dx, dy);
+    const nx = -dy / len, ny = dx / len;
+    const segs = Math.max(6, Math.floor(len / 26));
+    const path = () => {
+      ctx.beginPath(); ctx.moveTo(b.x1, b.y1);
+      for (let i = 1; i < segs; i++) {
+        const j = (rand() - 0.5) * 7 * k;
+        ctx.lineTo(b.x1 + dx * i / segs + nx * j, b.y1 + dy * i / segs + ny * j);
+      }
+      ctx.lineTo(b.x2, b.y2);
+    };
+    ctx.strokeStyle = rgba(b.color, 0.22 * k); ctx.lineWidth = 34 * k + 4; path(); ctx.stroke();
+    ctx.strokeStyle = rgba(b.color, 0.6 * k); ctx.lineWidth = 12 * k + 2; path(); ctx.stroke();
+    ctx.strokeStyle = rgba(C.white, k); ctx.lineWidth = 4 * k + 1; path(); ctx.stroke();
+    // 착탄 / 총구 플레어
+    for (const [px, py, s] of [[b.x2, b.y2, 70], [b.x1, b.y1, 44]]) {
+      const g = ctx.createRadialGradient(px, py, 0, px, py, s * k + 8);
+      g.addColorStop(0, rgba(C.white, k)); g.addColorStop(0.3, rgba(b.color, 0.7 * k)); g.addColorStop(1, rgba(b.color, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(px, py, s * k + 8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawParticles() {
+  ctx.save();
+  for (const p of S.particles) {
+    const k = 1 - p.t / p.life;
+    if (p.kind === 'char') {
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.font = `800 ${wordFont}px ${FONT}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = rgba(p.color, 1); ctx.shadowBlur = 14;
+      ctx.fillStyle = rgba(mix(C.white, p.color, 1 - k), k);
+      ctx.fillText(p.ch, 0, 0);
+      ctx.restore();
+    }
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const p of S.particles) {
+    const k = 1 - p.t / p.life;
+    if (p.kind === 'spark') {
+      ctx.strokeStyle = rgba(mix(C.white, p.color, 1 - k), k);
+      ctx.lineWidth = p.size * k;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04); ctx.stroke();
+    } else if (p.kind === 'ember') {
+      ctx.fillStyle = rgba(p.color, k * 0.8);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * k, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawRings() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const r of S.rings) {
+    const t = r.t / r.life, e = 1 - Math.pow(1 - t, 3);
+    ctx.strokeStyle = rgba(r.color, (1 - t) * 0.9);
+    ctx.lineWidth = r.width * (1 - t) + 0.5;
+    ctx.shadowColor = rgba(r.color, 1); ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.arc(r.x, r.y, Math.max(1, r.maxR * e), 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPopups() {
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const p of S.popups) {
+    const t = p.t / p.life;
+    const s = t < 0.15 ? 0.6 + (t / 0.15) * 0.7 : 1.3 - Math.min(0.3, (t - 0.15) * 1.5);
+    ctx.font = `900 ${p.size * s}px ${FONT}`;
+    ctx.fillStyle = rgba(p.color, 1 - Math.max(0, (t - 0.6) / 0.4));
+    ctx.shadowColor = rgba(p.color, 1); ctx.shadowBlur = 16;
+    ctx.fillText(p.text, p.x, p.y - t * 60);
+  }
+  ctx.restore();
+}
+
+function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const sx = (rand() - 0.5) * 2 * S.shake + S.kick.x, sy = (rand() - 0.5) * 2 * S.shake + S.kick.y;
+  ctx.setTransform(DPR, 0, 0, DPR, sx * DPR, sy * DPR);
+
+  drawBackground();
+  drawShieldLine();
+  drawLockLine();
+  for (const w of S.words) drawWord(w);
+  drawTurret();
+  drawRings();
+  drawBeams();
+  drawParticles();
+  drawPopups();
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // 비네트
+  const vg = ctx.createRadialGradient(cv.width / 2, cv.height / 2, cv.height * 0.3, cv.width / 2, cv.height / 2, cv.width * 0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, cv.width, cv.height);
+
+  if (S.flash > 0.01) {
+    ctx.fillStyle = rgba(S.flashColor, S.flash);
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+  // 실드 피격 글리치
+  if (S.glitch > 0) {
+    const n = 7, k = S.glitch / 0.35;
+    for (let i = 0; i < n; i++) {
+      const hh = Math.round((8 + rand() * 40) * DPR), yy = Math.round(rand() * (cv.height - hh));
+      const off = Math.round((rand() - 0.5) * 60 * k * DPR);
+      ctx.drawImage(cv, 0, yy, cv.width, hh, off, yy, cv.width, hh);
+    }
+    ctx.fillStyle = rgba(C.red, 0.12 * k);
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+}
+
+/* ======================= Input ======================= */
+input.addEventListener('input', onType);
+input.addEventListener('animationend', () => inputWrap.classList.remove('fire'));
+inputWrap.addEventListener('animationend', () => inputWrap.classList.remove('bad'));
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (S.running && !e.repeat) useBomb();
+    return;
+  }
+  if (!S.running) {
+    if (e.key === 'Enter' && $('overlay').classList.contains('show')) { e.preventDefault(); startGame(); }
+    return;
+  }
+  if (e.key === 'Enter' || e.key === 'Escape') {
+    e.preventDefault();
+    clearInput();
+    return;
+  }
+  if (document.activeElement !== input) input.focus();
+}, true);
+
+document.addEventListener('pointerdown', () => { if (S.running) setTimeout(() => input.focus(), 0); });
+$('start').addEventListener('click', startGame);
+window.addEventListener('resize', resize);
+
+/* ======================= Boot ======================= */
+resize();
+updateHud();
+renderBombs();
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  step(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+// 썸네일 캡처용: 봇이 실제 게임을 플레이하다가 레이저가 꽂히는 순간에 멈춘다.
+async function runCapture() {
+  document.body.classList.add('capture');
+  try { await Promise.race([document.fonts.load(`700 24px "Pretendard Variable"`), new Promise(r => setTimeout(r, 3000))]); } catch (e) { /* 폰트 없음 */ }
+  // 헤드리스 창 크기가 자리 잡을 때까지 기다린 뒤 시뮬레이션한다.
+  await new Promise(r => setTimeout(r, 600));
+  resize();
+  startGame();
+  const dt = 1 / 60;
+  let botWord = null, botT = 0.6;
+  // 1차: 60초를 돌려 화면에 단어가 가장 많을 때 레이저가 꽂히는 프레임을 찾는다.
+  // 2차: 같은 시드로 다시 불러와 그 프레임에서 멈춘다.
+  const target = Number(new URLSearchParams(location.search).get('frame') || 0);
+  let bestFrame = 0, bestCount = 0;
+  for (let i = 0; i < 60 * 60; i++) {
+    if (target && i === target) break;
+    botT -= dt;
+    if (botWord && !S.words.includes(botWord)) botWord = null;
+    if (botT <= 0) {
+      if (!botWord) {
+        const cands = S.words.filter(w => !w.doomed && w.y > groundY * 0.3).sort((a, b) => b.y - a.y);
+        botWord = cands[0] || null;
+        botT = botWord ? 0.02 : 0.1;
+      } else {
+        input.value = botWord.text.slice(0, S.typed.length + 1);
+        onType();
+        botT = S.typed ? 0.24 : 0.01;
+      }
+    }
+    step(dt);
+    const beam = S.beams[S.beams.length - 1];
+    if (!target && S.time > 8 && beam && beam.t > 0.04 && beam.t < 0.1 && S.typed.length >= 1) {
+      const score = S.words.length * 150 + Math.min(300, Math.hypot(beam.x2 - beam.x1, beam.y2 - beam.y1));
+      if (score > bestCount) { bestCount = score; bestFrame = i + 1; }
+    }
+  }
+  if (!target && bestFrame) { location.replace(`?capture&frame=${bestFrame}`); return; }
+  S.hitstop = 0;
+  S.shake = 0; S.kick.x = S.kick.y = 0;
+  document.documentElement.style.setProperty('--charge', S.charge.toFixed(3));
+  const hold = () => { render(); requestAnimationFrame(hold); };
+  requestAnimationFrame(hold);
+  document.title = 'captured';
+}
+
+if (CAPTURE) runCapture();
+else requestAnimationFrame(frame);
+</script>
+</body>
+</html>
