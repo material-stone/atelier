@@ -1,13 +1,15 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { AccessLevel, AuthState, Comment, Game, Post, TargetType } from "./types";
 import { AdminTools } from "./AdminTools";
 import { PrivacyPage } from "./PrivacyPage";
 
-// three.js is heavy, so the hero animation loads in its own chunk after the page text.
+// three.js is heavy, so the gem animation on the about page loads in its own chunk.
 const GemForge = lazy(() => import("./GemForge"));
-import { accessLabel, accessPermission, parseEmailList, rotationForGames } from "./lib/access";
+import { accessLabel, accessPermission, accessShortLabel, parseEmailList, rotationForGames } from "./lib/access";
 import { APP_BASE_PATH } from "./lib/config";
+import { loadRecent, pushRecent, saveRecent } from "./lib/recent";
+import { filterGames, popularGenres } from "./lib/search";
 import {
   createComment,
   createOrUpdateGameDraft,
@@ -45,6 +47,7 @@ import {
 } from "./lib/validation";
 
 const discordUrl = getConfiguredDiscordUrl();
+const logoUrl = `${import.meta.env.BASE_URL}favicon.svg`;
 
 const initialAuth: AuthState = {
   user: null,
@@ -54,6 +57,8 @@ const initialAuth: AuthState = {
   isMember: false,
   loading: true,
 };
+
+type Notify = (message: string) => void;
 
 export function App() {
   const [auth, setAuth] = useState<AuthState>(initialAuth);
@@ -73,43 +78,72 @@ export function App() {
 
 function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; posts: Post[] }) {
   const [notice, setNotice] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [recent, setRecent] = useState<string[]>(() => loadRecent());
   const location = useLocation();
 
   useEffect(() => {
     setNotice(null);
+    setDrawerOpen(false);
+    window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  const notify = (message: string) => {
+  // The phone drawer behaves like a dialog: Esc closes it and the page behind stops scrolling.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setDrawerOpen(false); };
+    document.documentElement.classList.add("drawer-open");
+    window.addEventListener("keydown", onKey);
+    return () => { document.documentElement.classList.remove("drawer-open"); window.removeEventListener("keydown", onKey); };
+  }, [drawerOpen]);
+
+  const notify = useCallback((message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(null), 5000);
-  };
+  }, []);
+
+  const markPlayed = useCallback((gameId: string) => {
+    setRecent((list) => {
+      if (list[0] === gameId) return list;
+      const next = pushRecent(list, gameId);
+      saveRecent(next);
+      return next;
+    });
+  }, []);
 
   return (
-    <div className={`app-shell ${location.pathname === "/" ? "is-home" : ""}`}>
-      <Header auth={auth} onNotify={notify} />
-      <main className="page-main">
+    <div className="app-shell">
+      <TopBar auth={auth} drawerOpen={drawerOpen} onMenu={() => setDrawerOpen(true)} onNotify={notify} />
+      <div className={`sidebar-scrim${drawerOpen ? " is-open" : ""}`} onClick={() => setDrawerOpen(false)} aria-hidden="true" />
+      <Sidebar auth={auth} games={games} recent={recent} open={drawerOpen} onClose={() => setDrawerOpen(false)} onNotify={notify} />
+      <main className="app-main">
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/hub" element={<HubPage games={games} posts={posts} />} />
-          <Route path="/community" element={<CommunityPage auth={auth} posts={posts} onNotify={notify} />} />
-          <Route path="/hub/community" element={<Navigate to="/community" replace />} />
-          <Route path="/hub/game/:gameId" element={<GamePage auth={auth} games={games} onNotify={notify} />} />
-          <Route path="/hub/admin" element={<AdminPage auth={auth} games={games} onNotify={notify} />} />
+          <Route path="/" element={<HomePage games={games} />} />
+          <Route path="/game/:gameId" element={<GameRoute auth={auth} games={games} onNotify={notify} onPlayed={markPlayed} />} />
+          <Route path="/community" element={<CommunityPage auth={auth} posts={posts} games={games} onNotify={notify} />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/admin" element={<AdminPage auth={auth} games={games} onNotify={notify} />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          {/* Addresses from the old layout, kept so shared links still land somewhere. */}
+          <Route path="/hub" element={<Navigate to="/" replace />} />
+          <Route path="/hub/community" element={<Navigate to="/community" replace />} />
+          <Route path="/hub/game/:gameId" element={<LegacyGameRedirect />} />
+          <Route path="/hub/admin" element={<Navigate to="/admin" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <Footer />
       {notice ? <div className="toast" role="status">{notice}</div> : null}
     </div>
   );
 }
 
-function Header({ auth, onNotify }: { auth: AuthState; onNotify: (message: string) => void }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const navigate = useNavigate();
+function LegacyGameRedirect() {
+  const { gameId = "" } = useParams();
+  return <Navigate to={`/game/${gameId}`} replace />;
+}
 
-  async function handleAuth() {
+function useAuthAction(auth: AuthState, onNotify: Notify) {
+  return async function handleAuth() {
     try {
       if (auth.user) {
         await signOutUser();
@@ -121,184 +155,148 @@ function Header({ auth, onNotify }: { auth: AuthState; onNotify: (message: strin
     } catch (error) {
       onNotify(error instanceof Error ? error.message : "로그인에 실패했습니다.");
     }
-  }
+  };
+}
 
+function initialOf(name: string): string {
+  return (name.trim().slice(0, 1) || "?").toUpperCase();
+}
+
+/* ---------- Frame: phone top bar and the sidebar / drawer ---------- */
+
+function TopBar({ auth, drawerOpen, onMenu, onNotify }: { auth: AuthState; drawerOpen: boolean; onMenu: () => void; onNotify: Notify }) {
+  const handleAuth = useAuthAction(auth, onNotify);
   return (
-    <header className="site-header">
-      <div className="header-inner">
-        <Link to="/" className="brand" aria-label="Atelier home" onClick={() => setMenuOpen(false)}>
-          <img className="brand-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" aria-hidden="true" />
-          <span className="brand-copy">
-            <strong>Atelier</strong>
-            <small>material stone games</small>
-          </span>
-        </Link>
-        <button className="menu-toggle" type="button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen}>
-          <span /><span /><span />
-          <span className="sr-only">메뉴 열기</span>
-        </button>
-        <nav className={`main-nav ${menuOpen ? "is-open" : ""}`} aria-label="주요 메뉴">
-          <NavLink to="/" end onClick={() => setMenuOpen(false)}>Home</NavLink>
-          <NavLink to="/hub" onClick={() => setMenuOpen(false)}>Hub</NavLink>
-          <NavLink to="/community" onClick={() => setMenuOpen(false)}>Community</NavLink>
-        </nav>
-        <div className={`header-actions ${menuOpen ? "is-open" : ""}`}>
-          <a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">YouTube <span aria-hidden="true">↗</span></a>
-          {discordUrl ? <a href={discordUrl} target="_blank" rel="noreferrer">Discord <span aria-hidden="true">↗</span></a> : null}
-          {auth.isAdmin ? <button className="admin-link" type="button" onClick={() => navigate("/hub/admin")}>Admin</button> : null}
-          <button className="auth-button" type="button" onClick={handleAuth}>
-            {auth.user ? <><span className="avatar-dot">{getDisplayName(auth.user).slice(0, 1).toUpperCase()}</span> Sign out</> : "Sign in with Google"}
-          </button>
-        </div>
-      </div>
+    <header className="topbar">
+      <button className="icon-button" type="button" onClick={onMenu} aria-label="메뉴 열기" aria-expanded={drawerOpen} aria-controls="app-sidebar"><MenuIcon /></button>
+      <Link to="/" className="brand"><img src={logoUrl} alt="" aria-hidden="true" /><span>Atelier</span></Link>
+      {auth.user
+        ? <span className="avatar" role="img" aria-label={`${getDisplayName(auth.user)} 로그인됨`}>{initialOf(getDisplayName(auth.user))}</span>
+        : <button className="button button-primary small" type="button" onClick={handleAuth} disabled={auth.loading}>로그인</button>}
     </header>
   );
 }
 
-function HomePage() {
+function Sidebar({ auth, games, recent, open, onClose, onNotify }: { auth: AuthState; games: Game[]; recent: string[]; open: boolean; onClose: () => void; onNotify: Notify }) {
+  const handleAuth = useAuthAction(auth, onNotify);
+  const rotation = useMemo(() => rotationForGames(games), [games]);
+  const recentGames = recent.map((id) => games.find((game) => game.id === id)).filter((game): game is Game => Boolean(game));
+  const badge = (game: Game) => (rotation.has(game.id) ? "이번 주 무료" : game.accessLevel === "public" ? null : accessShortLabel(game.accessLevel));
+  const sideLink = ({ isActive }: { isActive: boolean }) => `side-link${isActive ? " is-active" : ""}`;
+
+  return (
+    <nav id="app-sidebar" className={`sidebar${open ? " is-open" : ""}`} aria-label="주 메뉴">
+      <div className="sidebar-head">
+        <Link to="/" className="brand"><img src={logoUrl} alt="" aria-hidden="true" /><span>Atelier</span></Link>
+        <button className="icon-button sidebar-close" type="button" onClick={onClose} aria-label="메뉴 닫기"><CloseIcon /></button>
+      </div>
+      <div className="sidebar-scroll">
+        <div className="side-group">
+          <NavLink to="/" end className={sideLink}><HomeIcon />홈</NavLink>
+          <NavLink to="/community" className={sideLink}><ChatIcon />커뮤니티</NavLink>
+          <NavLink to="/about" className={sideLink}><InfoIcon />Atelier 소개</NavLink>
+          {auth.isAdmin ? <NavLink to="/admin" className={sideLink}><UploadIcon />업로드 룸</NavLink> : null}
+        </div>
+        {recentGames.length ? (
+          <div className="side-group">
+            <h2 className="side-heading">최근 플레이</h2>
+            {recentGames.map((game) => <NavLink key={game.id} to={`/game/${game.id}`} className={sideLink}><span className="side-title">{game.title}</span></NavLink>)}
+          </div>
+        ) : null}
+        <div className="side-group">
+          <h2 className="side-heading">전체 게임</h2>
+          {games.map((game) => {
+            const label = badge(game);
+            return <NavLink key={game.id} to={`/game/${game.id}`} className={sideLink}><span className="side-title">{game.title}</span>{label ? <span className="side-badge">{label}</span> : null}</NavLink>;
+          })}
+        </div>
+      </div>
+      <div className="sidebar-foot">
+        <button className="account-button" type="button" onClick={handleAuth} disabled={auth.loading}>
+          {auth.user
+            ? <><span className="avatar" aria-hidden="true">{initialOf(getDisplayName(auth.user))}</span><span className="account-copy"><strong>{getDisplayName(auth.user)}</strong><small>눌러서 로그아웃</small></span></>
+            : <><span className="avatar avatar-empty" aria-hidden="true"><PersonIcon /></span><span className="account-copy"><strong>Google로 로그인</strong><small>좋아요·댓글을 남기려면</small></span></>}
+        </button>
+        <div className="sidebar-links">
+          <a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">YouTube ↗</a>
+          <Link to="/privacy">개인정보처리방침</Link>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+/* ---------- Home: search and the game list ---------- */
+
+function gameBadge(game: Game, rotation: Set<string>): string | null {
+  if (rotation.has(game.id)) return "이번 주 무료";
+  return game.accessLevel === "public" ? null : accessShortLabel(game.accessLevel);
+}
+
+function genreText(game: Game): string {
+  return game.genres.map((genre) => `# ${genre}`).join("  ");
+}
+
+function HomePage({ games }: { games: Game[] }) {
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState<string | null>(null);
+  const rotation = useMemo(() => rotationForGames(games), [games]);
+  const tags = useMemo(() => popularGenres(games).slice(0, 12), [games]);
+  const results = useMemo(() => filterGames(games, query, tag), [games, query, tag]);
+  const filtered = query.trim() !== "" || tag !== null;
+
   return (
     <div className="home-page">
-      <section className="hero section-frame">
-        <div className="hero-copy">
-          <h1>지금 만들고 있는 게임,<br /><em>먼저 플레이하세요.</em></h1>
-          <p className="hero-lede">Atelier는 Material Stone Games가 만드는 게임과 작은 실험들을 모아두는 작업실입니다. 완성된 게임부터 아직 흔들리는 프로토타입까지, 지금 여기서 만나보세요.</p>
-          <div className="hero-actions">
-            <Link className="button button-primary" to="/hub">게임 둘러보기 <span aria-hidden="true">→</span></Link>
-            {discordUrl
-              ? <a className="button button-quiet" href={discordUrl} target="_blank" rel="noreferrer">커뮤니티 참여</a>
-              : <Link className="button button-quiet" to="/community">커뮤니티 참여</Link>}
+      <div className="home-head">
+        <h1>오늘은 어떤 게임을 해볼까요?</h1>
+        <form className="search-field" role="search" onSubmit={(event) => event.preventDefault()}>
+          <label htmlFor="game-search" className="sr-only">게임 찾기</label>
+          <SearchIcon />
+          <input id="game-search" type="text" inputMode="search" enterKeyHint="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="게임 이름이나 #장르 태그로 찾기" />
+          {query ? <button className="search-clear" type="button" onClick={() => setQuery("")} aria-label="검색어 지우기"><CloseIcon /></button> : null}
+        </form>
+        {tags.length ? (
+          <div className="tag-chips" role="group" aria-label="장르 태그">
+            <span className="tag-chips-label">장르 태그</span>
+            {tags.map((genre) => <button key={genre} className="chip" type="button" aria-pressed={tag === genre} onClick={() => setTag(tag === genre ? null : genre)}># {genre}</button>)}
           </div>
-        </div>
-        <div className="hero-art" aria-hidden="true">
-          <Suspense fallback={null}><GemForge /></Suspense>
-        </div>
-      </section>
-      <section className="home-cards section-frame">
-        <InfoCard index="01" title="Public builds" text="누구나 바로 플레이할 수 있는 공개 게임." tone="public" />
-        <InfoCard index="02" title="Member demos" text="Google 로그인으로 한 단계 더 깊은 데모." tone="login" />
-        <InfoCard index="03" title="Prototype room" text="채널 구독자에게 열리는 가장 이른 실험." tone="subscriber" />
-      </section>
+        ) : null}
+        <p className="result-count" aria-live="polite">{filtered ? `검색 결과 ${results.length}개` : `전체 게임 ${games.length}개`}</p>
+      </div>
+      <div className="home-results">
+        {results.length
+          ? <div className="game-grid">{results.map((game) => <GameTile key={game.id} game={game} badge={gameBadge(game, rotation)} />)}</div>
+          : <p className="empty-box">{games.length ? "맞는 게임이 없어요. 다른 이름이나 태그로 찾아보세요." : "게임을 불러오는 중이에요…"}</p>}
+      </div>
+      <p className="home-hint">검색어가 없으면 전체 게임이 보여요 · 카드를 누르면 바로 플레이할 수 있어요</p>
     </div>
   );
 }
 
-function InfoCard({ index, title, text, tone }: { index: string; title: string; text: string; tone: string }) {
-  return <article className={`info-card ${tone}`}><span className="card-index">{index}</span><h2>{title}</h2><p>{text}</p><span className="card-arrow" aria-hidden="true">↗</span></article>;
-}
-
-function HubPage({ games, posts }: { games: Game[]; posts: Post[] }) {
-  const [filter, setFilter] = useState("All");
-  const genres = useMemo(() => ["All", ...Array.from(new Set(games.flatMap((game) => game.genres)))], [games]);
-  const visibleGames = games.filter((game) => filter === "All" || game.genres.includes(filter));
-  const rotation = useMemo(() => rotationForGames(games), [games]);
-
+function GameTile({ game, badge }: { game: Game; badge: string | null }) {
   return (
-    <div className="hub-page page-container">
-      <section className="page-heading">
-        <div><h1>Atelier <em>Hub</em></h1></div>
-        <p className="heading-note">완성된 게임과 데모, 아직 다듬는 중인 실험까지.<br />마음에 드는 카드를 골라 들어가 보세요.</p>
-      </section>
-      <div className="hub-toolbar">
-        <div className="filter-row" aria-label="장르 필터">
-          {genres.map((genre) => <button key={genre} className={`filter-chip ${filter === genre ? "active" : ""}`} type="button" onClick={() => setFilter(genre)}>{genre}</button>)}
-        </div>
-        <span className="catalogue-count">{visibleGames.length.toString().padStart(2, "0")} projects</span>
-      </div>
-      <div className="game-grid">
-        {visibleGames.map((game, index) => <GameCard game={game} index={index} freeThisWeek={rotation.has(game.id)} key={game.id} />)}
-      </div>
-      <section className="community-banner">
-        <div><p className="eyebrow">FROM THE COMMUNITY</p><h2>What are you playing?</h2><p>작업실의 소식과 플레이어들의 이야기를 나눠보세요.</p></div>
-        <div className="banner-stat"><strong>{posts.length.toString().padStart(2, "0")}</strong><span>recent notes</span></div>
-        <Link className="button button-primary" to="/community">Open board <span aria-hidden="true">→</span></Link>
-      </section>
-    </div>
-  );
-}
-
-function GameCard({ game, index, freeThisWeek }: { game: Game; index: number; freeThisWeek: boolean }) {
-  const accent = ["art-gem", "art-ember", "art-moss"][index % 3];
-  return (
-    <Link className={`game-card ${accent}`} to={`/hub/game/${game.id}`}>
-      <div className="game-card-art" style={game.coverUrl ? { backgroundImage: `url(${game.coverUrl})` } : undefined}>
-        <span className="card-number">{String(index + 1).padStart(2, "0")}</span>
-        <span className="access-pill">{freeThisWeek ? "FREE THIS WEEK" : accessLabel(game.accessLevel)}</span>
-        <span className="card-open" aria-hidden="true">↗</span>
-      </div>
-      <div className="game-card-copy"><div><h2>{game.title}</h2><p>{game.genres.join(" / ")}</p></div><span className="like-count">♡ {game.likeCount}</span></div>
+    <Link className="game-tile" to={`/game/${game.id}`}>
+      <span className="game-tile-art" style={game.coverUrl ? { backgroundImage: `url(${game.coverUrl})` } : undefined}>
+        {badge ? <span className="tile-badge">{badge}</span> : null}
+        <span className="tile-play" aria-hidden="true"><PlayIcon /></span>
+      </span>
+      <span className="game-tile-copy"><strong>{game.title}</strong><span>{genreText(game)}</span></span>
     </Link>
   );
 }
 
-function CommunityPage({ auth, posts, onNotify }: { auth: AuthState; posts: Post[]; onNotify: (message: string) => void }) {
-  return (
-    <div className="community-page page-container">
-      <section className="page-heading compact"><div><h1><em>Community</em></h1></div><p className="heading-note">짧은 글과 한 장의 이미지로<br />작업실에 흔적을 남겨주세요.</p></section>
-      <PostComposer auth={auth} onNotify={onNotify} />
-      <div className="post-list">{posts.map((post) => <PostCard key={post.id} post={post} auth={auth} onNotify={onNotify} />)}</div>
-      <p className="retention-note"><span aria-hidden="true">✳</span> 게시글은 한 달 뒤 정리되며, 매월 좋아요 10개 이상인 1위 글은 작업실에 남습니다.</p>
-    </div>
-  );
-}
+/* ---------- Game: the screen card, its notes and the player comments ---------- */
 
-function PostComposer({ auth, onNotify }: { auth: AuthState; onNotify: (message: string) => void }) {
-  const [text, setText] = useState("");
-  const [image, setImage] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!auth.user) return onNotify("글을 작성하려면 Google 로그인이 필요합니다.");
-    const textError = validatePostText(text);
-    if (textError) return onNotify(textError);
-    if (image) {
-      const imageError = validateImage(image);
-      if (imageError) return onNotify(imageError);
-    }
-    setSaving(true);
-    try {
-      const result = await createPost(text.trim(), Boolean(image));
-      if (image && result.imagePath) {
-        await uploadBoardImage(result.postId, image);
-      }
-      setText("");
-      setImage(null);
-      const input = document.getElementById("post-image") as HTMLInputElement | null;
-      if (input) input.value = "";
-      onNotify("게시글을 올렸습니다.");
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "게시글을 올리지 못했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form className="post-composer" onSubmit={submit}>
-      <div className="composer-avatar">{auth.user ? getDisplayName(auth.user).slice(0, 1).toUpperCase() : "?"}</div>
-      <div className="composer-fields"><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={auth.user ? "작업실에 남길 짧은 메모" : "Google 로그인 후 메모를 남길 수 있어요."} maxLength={MAX_POST_LENGTH} disabled={!auth.user || saving} /><div className="composer-footer"><label className="file-label" htmlFor="post-image">＋ image<input id="post-image" type="file" accept="image/jpeg,image/png,image/webp" disabled={!auth.user || saving} onChange={(event) => setImage(event.target.files?.[0] ?? null)} /></label><span className="character-count">{text.length} / {MAX_POST_LENGTH}</span><button className="button button-primary small" type="submit" disabled={!auth.user || saving}>{saving ? "Posting…" : "Post note"}</button></div>{image ? <span className="file-selected">{image.name}</span> : null}</div>
-    </form>
-  );
-}
-
-function PostCard({ post, auth, onNotify }: { post: Post; auth: AuthState; onNotify: (message: string) => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(post.likeCount);
-  return (
-    <article className="post-card">
-      <div className="post-card-head"><div className="post-author"><span className="author-avatar">{post.authorName.slice(0, 1).toUpperCase()}</span><div><strong>{post.authorName}</strong><time>{formatDate(post.createdAt)}</time></div></div><span className={`retention-badge ${post.retentionStatus}`}>{post.retentionStatus === "preserved" ? "preserved" : "field note"}</span></div>
-      <p className="post-text">{post.text}</p>
-      {post.imageUrl ? <img className="post-image" src={post.imageUrl} alt="게시글 첨부 이미지" /> : null}
-      <div className="post-card-actions"><button className={liked ? "action-button active" : "action-button"} type="button" onClick={async () => { if (!auth.user) return onNotify("좋아요를 누르려면 Google 로그인이 필요합니다."); try { const result = await toggleLike("post", post.id); setLiked(result.liked); setLikeCount(result.likeCount); } catch (error) { onNotify(error instanceof Error ? error.message : "좋아요 처리에 실패했습니다."); } }}>♡ {likeCount}</button><button className="action-button" type="button" onClick={() => setExpanded((value) => !value)}>◌ {post.commentCount || "Comment"}</button>{canDelete(auth, post.authorId) ? <button className="action-button danger" type="button" onClick={() => confirmDelete("이 게시글과 댓글을 모두 삭제할까요?", () => deletePost(post.id), "게시글을 삭제했습니다.", onNotify)}>Delete</button> : null}<span className="post-date">{post.monthKey}</span></div>
-      {expanded ? <CommentThread targetType="post" targetId={post.id} auth={auth} onNotify={onNotify} /> : null}
-    </article>
-  );
-}
-
-function GamePage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; onNotify: (message: string) => void }) {
+function GameRoute(props: { auth: AuthState; games: Game[]; onNotify: Notify; onPlayed: (gameId: string) => void }) {
   const { gameId = "" } = useParams();
-  const [game, setGame] = useState<Game | null>(games.find((item) => item.id === gameId) ?? null);
+  // A fresh page per game keeps like, play and view state from leaking across games.
+  return <GamePage key={gameId} gameId={gameId} {...props} />;
+}
+
+function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string; auth: AuthState; games: Game[]; onNotify: Notify; onPlayed: (gameId: string) => void }) {
+  const listed = games.find((item) => item.id === gameId) ?? null;
+  const [fetched, setFetched] = useState<Game | null | undefined>(undefined);
+  const game = listed ?? fetched ?? null;
   const [playUrl, setPlayUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [playStatus, setPlayStatus] = useState<"idle" | "loading" | string>("idle");
@@ -308,13 +306,13 @@ function GamePage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; o
   const [verifying, setVerifying] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
 
+  // The live list may not hold this game yet (or ever, for a direct link), so ask for it once.
   useEffect(() => {
+    if (listed) return;
     let alive = true;
-    if (!game || game.id !== gameId) {
-      findGameById(gameId).then((result) => { if (alive) setGame(result); });
-    }
+    findGameById(gameId).then((result) => { if (alive) setFetched(result); });
     return () => { alive = false; };
-  }, [gameId, game]);
+  }, [gameId, listed]);
 
   useEffect(() => {
     setLikeCount(game?.likeCount ?? 0);
@@ -324,7 +322,11 @@ function GamePage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; o
   const permission = game ? accessPermission(game, auth, rotation) : { allowed: false as const };
   const loadedGameId = game?.id;
 
-  // Open the build as soon as the visitor is known to have access; locked games stay on the black screen.
+  useEffect(() => {
+    if (loadedGameId) onPlayed(loadedGameId);
+  }, [loadedGameId, onPlayed]);
+
+  // Open the build as soon as the visitor is known to have access; locked games stay on the dark screen.
   useEffect(() => {
     setPlaying(false);
     setPlayUrl(null);
@@ -343,7 +345,10 @@ function GamePage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedGameId, auth.loading]);
 
-  if (!game) return <EmptyState title="Game not found" text="이 작업물은 아직 공개되지 않았거나 주소가 잘못되었습니다." />;
+  if (!game) {
+    if (fetched === undefined) return <LoadingState />;
+    return <EmptyState title="게임을 찾을 수 없어요" text="아직 공개되지 않았거나 주소가 잘못되었어요." />;
+  }
 
   const freeThisWeek = game.accessLevel === "subscriber" && rotation.has(game.id);
   async function startPlaying() {
@@ -386,14 +391,62 @@ function GamePage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; o
     }
   }
 
+  async function like() {
+    if (!game) return;
+    if (!auth.user) return onNotify("좋아요를 누르려면 Google 로그인이 필요합니다.");
+    try {
+      const result = await toggleLike("game", game.id);
+      setLiked(result.liked);
+      setLikeCount(result.likeCount);
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "좋아요 처리에 실패했습니다.");
+    }
+  }
+
+  async function share() {
+    if (!game) return;
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: game.title, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      onNotify("게임 링크를 복사했어요.");
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) onNotify("링크를 복사하지 못했어요.");
+    }
+  }
+
+  const header = (
+    <>
+      <h1>{game.title}</h1>
+      <div className="game-card-actions">
+        <button className={`pill-button${liked ? " is-liked" : ""}`} type="button" onClick={like} aria-pressed={liked} aria-label={`좋아요 ${likeCount}`}>{liked ? "♥" : "♡"} {likeCount}</button>
+        <button className="pill-button" type="button" onClick={share}>공유</button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="game-page page-container">
-      <Link className="back-link" to="/hub">← Back to hub</Link>
-      <section className="game-detail-heading"><div className={game.coverUrl ? "game-detail-art has-cover" : "game-detail-art"} style={game.coverUrl ? { backgroundImage: `url(${game.coverUrl})` } : undefined} /><div className="game-detail-copy"><p className="eyebrow">PROJECT / {game.buildStatus.toUpperCase()}</p><h1>{game.title}</h1><p className="game-detail-description">{game.description || "Material Stone Games의 플레이 가능한 작업물입니다. 지금의 빌드에서 다음 아이디어를 만나보세요."}</p><div className="tag-row">{game.genres.map((genre) => <span className="tag" key={genre}>{genre}</span>)}<span className={`tag access-tag ${game.accessLevel}`}>{accessLabel(game.accessLevel)}</span>{freeThisWeek ? <span className="tag access-tag public">FREE THIS WEEK</span> : null}</div><div className="detail-actions"><button className="button button-primary" type="button" onClick={startPlaying}>{playing ? "Restart build" : "Play build"} <span aria-hidden="true">→</span></button><button className={liked ? "button button-like active" : "button button-like"} type="button" onClick={async () => { if (!auth.user) return onNotify("좋아요를 누르려면 Google 로그인이 필요합니다."); try { const result = await toggleLike("game", game.id); setLiked(result.liked); setLikeCount(result.likeCount); } catch (error) { onNotify(error instanceof Error ? error.message : "좋아요 처리에 실패했습니다."); } }}>♡ {likeCount}</button>{viewCount !== null ? <span className="view-count" role="img" aria-label={`조회수 ${viewCount.toLocaleString("en-US")}회`} title="조회수"><EyeIcon /> {viewCount.toLocaleString("en-US")}</span> : null}</div></div></section>
-      {!permission.allowed && permission.reason === "member" ? <div className="verification-callout"><div><strong>Early access is for members.</strong><p>Material Stone 채널 멤버십 회원에게 먼저 열리는 빌드입니다. 멤버십 확인은 운영자가 처리합니다.</p></div><a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">Open channel ↗</a></div> : null}
-      {!permission.allowed && permission.reason === "subscriber" && auth.user ? <div className="verification-callout"><div><strong>Prototype room is locked.</strong><p>Material Stone YouTube 채널 구독을 확인하면 이 빌드가 열립니다.</p></div><button className="button button-quiet" type="button" onClick={verifySubscriber} disabled={verifying}>{verifying ? "Checking…" : "Verify subscription"}</button><a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">Open channel ↗</a></div> : null}
-      {playing ? <PlaySurface playUrl={playUrl} playerRef={playerRef} /> : <PlayScreen message={playScreenMessage(auth, permission, playStatus)} locked={!auth.loading && !permission.allowed} />}
-      <section className="comments-section"><div className="section-title-row"><div><p className="eyebrow">PLAYTEST NOTES</p><h2>Comments</h2></div><span className="comment-rule">01 / 01</span></div><CommentThread targetType="game" targetId={game.id} auth={auth} onNotify={onNotify} /></section>
+    <div className="game-page">
+      <article className="game-card">
+        <GameScreen header={header} playing={playing} playUrl={playUrl} message={playScreenMessage(auth, permission, playStatus)} locked={!auth.loading && !permission.allowed} playerRef={playerRef} />
+        <div className="game-info">
+          <div className="tag-row">
+            {game.genres.map((genre) => <span className="tag" key={genre}># {genre}</span>)}
+            <span className={`tag access-tag ${game.accessLevel}`}>{accessShortLabel(game.accessLevel)}</span>
+            {freeThisWeek ? <span className="tag access-tag public">이번 주 무료</span> : null}
+          </div>
+          <p className="game-description">{game.description || "Material Stone Games의 플레이 가능한 작업물입니다. 지금의 빌드에서 다음 아이디어를 만나보세요."}</p>
+          <p className="game-stats">{viewCount !== null ? `조회 ${viewCount.toLocaleString("ko-KR")} · ` : ""}좋아요 {likeCount}</p>
+        </div>
+      </article>
+      {!permission.allowed && permission.reason === "member" ? <div className="callout"><div><strong>채널 멤버 얼리 액세스</strong><p>Material Stone 채널 멤버십 회원에게 먼저 열리는 빌드입니다. 멤버십 확인은 운영자가 처리합니다.</p></div><a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a></div> : null}
+      {!permission.allowed && permission.reason === "subscriber" && auth.user ? <div className="callout"><div><strong>구독자 프로토타입</strong><p>Material Stone YouTube 채널 구독을 확인하면 이 빌드가 열립니다.</p></div><button className="button button-primary small" type="button" onClick={verifySubscriber} disabled={verifying}>{verifying ? "확인 중…" : "구독 확인"}</button><a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a></div> : null}
+      <section className="game-comments">
+        <CommentThread targetType="game" targetId={game.id} auth={auth} onNotify={onNotify} heading="플레이어 한마디" docked />
+      </section>
     </div>
   );
 }
@@ -409,10 +462,6 @@ function playScreenMessage(auth: AuthState, permission: ReturnType<typeof access
   return status;
 }
 
-function PlayScreen({ message, locked }: { message: string; locked: boolean }) {
-  return <div className="play-screen" role="status">{locked ? <span className="play-screen-kicker">LOCKED</span> : null}<p>{message}</p></div>;
-}
-
 // Keyboard Lock exists only in some browsers and must be called from this top-level page, not from the build's iframe.
 function keyboardLock() {
   return (navigator as Navigator & { keyboard?: { lock(keys: string[]): Promise<void>; unlock(): void } }).keyboard;
@@ -422,7 +471,8 @@ function lockEscape() {
   void keyboardLock()?.lock(["Escape"]).catch(() => undefined);
 }
 
-function PlaySurface({ playUrl, playerRef }: { playUrl: string | null; playerRef: React.RefObject<HTMLDivElement | null> }) {
+/** The card's header and the game screen under it; together they are what goes fullscreen. */
+function GameScreen({ header, playing, playUrl, message, locked, playerRef }: { header: ReactNode; playing: boolean; playUrl: string | null; message: string; locked: boolean; playerRef: React.RefObject<HTMLDivElement | null> }) {
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   // iPhone Safari has no element fullscreen, so the player falls back to covering the viewport.
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
@@ -434,7 +484,7 @@ function PlaySurface({ playUrl, playerRef }: { playUrl: string | null; playerRef
     frameRef.current?.contentWindow?.postMessage({ type: "atelier:fullscreen-change", fullscreen }, "*");
   }
   useEffect(() => {
-    // The toolbar button that held focus unmounts in fullscreen; keyboard games need the keys to reach the build.
+    // The header button that held focus unmounts in fullscreen; keyboard games need the keys to reach the build.
     if (fullscreen) frameRef.current?.focus();
     else keyboardLock()?.unlock();
     announceFullscreen();
@@ -491,7 +541,23 @@ function PlaySurface({ playUrl, playerRef }: { playUrl: string | null; playerRef
     // Older WebKit returns nothing and fails silently, so check that fullscreen really started.
     window.setTimeout(() => { if (!fullscreenElement()) setPseudoFullscreen(true); }, 500);
   }
-  return <div className={`play-surface${pseudoFullscreen ? " is-pseudo-fullscreen" : ""}`} ref={playerRef}>{fullscreen ? null : <div className="play-surface-top"><span>ATELIER PLAYER / LIVE BUILD</span><button className="fullscreen-toggle" type="button" onClick={enterFullscreen} aria-label="전체화면" title="전체화면"><FullscreenIcon /></button></div>}{playUrl ? <iframe ref={frameRef} title="Atelier game build" src={playUrl} onLoad={announceFullscreen} allow="fullscreen; gamepad; pointer-lock; autoplay" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock" /> : <div className="demo-frame"><span className="live-dot" /><strong>Build gateway connected</strong><p>Firebase 환경변수를 연결하면 업로드된 게임이 이 프레임에서 실행됩니다.</p></div>}</div>;
+
+  let screen: ReactNode;
+  if (!playing) screen = <div className="play-screen" role="status">{locked ? <span className="play-screen-kicker">잠긴 게임</span> : null}<p>{message}</p></div>;
+  else if (playUrl) screen = <iframe ref={frameRef} title="Atelier game build" src={playUrl} onLoad={announceFullscreen} allow="fullscreen; gamepad; pointer-lock; autoplay" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock" />;
+  else screen = <div className="play-screen"><span className="live-dot" /><p>Firebase 환경변수를 연결하면 업로드된 게임이 이 화면에서 실행됩니다.</p></div>;
+
+  return (
+    <div className={`game-screen${pseudoFullscreen ? " is-pseudo-fullscreen" : ""}`} ref={playerRef}>
+      {fullscreen ? null : (
+        <div className="game-card-head">
+          {header}
+          {playing ? <button className="round-button" type="button" onClick={enterFullscreen} aria-label="전체 화면" title="전체 화면"><FullscreenIcon /></button> : null}
+        </div>
+      )}
+      <div className="game-screen-frame">{screen}</div>
+    </div>
+  );
 }
 
 // Safari before 16.4 (and iPadOS) only exposes the webkit-prefixed fullscreen API.
@@ -501,19 +567,17 @@ function fullscreenEnabled() { const doc = document as FullscreenDocument; retur
 function fullscreenElement() { const doc = document as FullscreenDocument; return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null; }
 async function exitFullscreen() { const doc = document as FullscreenDocument; if (doc.exitFullscreen) await doc.exitFullscreen(); else await doc.webkitExitFullscreen?.(); }
 
-function FullscreenIcon() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" /></svg>;
-}
+/* ---------- Comments as chat bubbles ---------- */
 
-function EyeIcon() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8Z" /><circle cx="8" cy="8" r="2" /></svg>;
-}
-
-function CommentThread({ targetType, targetId, auth, onNotify }: { targetType: TargetType; targetId: string; auth: AuthState; onNotify: (message: string) => void }) {
+function CommentThread({ targetType, targetId, auth, onNotify, heading, docked = false }: { targetType: TargetType; targetId: string; auth: AuthState; onNotify: Notify; heading?: string; docked?: boolean }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<string | undefined>();
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => subscribeToComments(targetType, targetId, setComments), [targetId, targetType]);
+  const replyTarget = comments.find((comment) => comment.id === replyTo);
+  const inputId = `comment-${targetType}-${targetId}`;
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!auth.user) return onNotify("댓글을 쓰려면 Google 로그인이 필요합니다.");
@@ -528,19 +592,64 @@ function CommentThread({ targetType, targetId, auth, onNotify }: { targetType: T
       onNotify(reason instanceof Error ? reason.message : "댓글을 남기지 못했습니다.");
     }
   }
-  return <div className="comment-thread">{comments.length ? <div className="comment-list">{comments.filter((comment) => comment.depth === 0).map((comment) => <div className="comment-group" key={comment.id}><CommentRow comment={comment} auth={auth} onNotify={onNotify} onReply={() => setReplyTo(comment.id)} /><div className="replies">{comments.filter((reply) => reply.parentId === comment.id).map((reply) => <CommentRow comment={reply} auth={auth} onNotify={onNotify} key={reply.id} />)}</div></div>)}</div> : <p className="empty-comments">아직 댓글이 없습니다. 첫 번째 이야기를 남겨보세요.</p>}<form className="comment-form" onSubmit={submit}><input value={text} onChange={(event) => setText(event.target.value)} placeholder={replyTo ? "답글을 입력하세요" : "짧은 댓글을 남겨보세요"} maxLength={MAX_COMMENT_LENGTH} /><button className="button button-primary small" type="submit">Send</button></form>{replyTo ? <button className="cancel-reply" type="button" onClick={() => setReplyTo(undefined)}>답글 취소</button> : null}</div>;
+
+  function startReply(commentId: string) {
+    setReplyTo(commentId);
+    inputRef.current?.focus();
+  }
+
+  const mine = (comment: Comment) => Boolean(auth.user && auth.user.uid === comment.authorId);
+  const topLevel = comments.filter((comment) => comment.depth === 0);
+
+  return (
+    <div className={`comment-thread${docked ? " is-docked" : ""}`}>
+      {heading ? <h2 className="section-label">{heading} {comments.length}</h2> : null}
+      {topLevel.length ? (
+        <ol className="bubble-list">
+          {topLevel.map((comment) => {
+            const replies = comments.filter((reply) => reply.parentId === comment.id);
+            return (
+              <li className="bubble-group" key={comment.id}>
+                <Bubble comment={comment} mine={mine(comment)} auth={auth} onNotify={onNotify} onReply={() => startReply(comment.id)} />
+                {replies.length ? <ol className="bubble-replies">{replies.map((reply) => <li key={reply.id}><Bubble comment={reply} mine={mine(reply)} auth={auth} onNotify={onNotify} /></li>)}</ol> : null}
+              </li>
+            );
+          })}
+        </ol>
+      ) : <p className="empty-note">아직 한마디가 없어요. 첫 이야기를 남겨보세요.</p>}
+      <form className="composer" onSubmit={submit}>
+        {replyTarget ? <div className="composer-context"><span>↳ {replyTarget.authorName}님에게 답글</span><button type="button" onClick={() => setReplyTo(undefined)} aria-label="답글 취소"><CloseIcon /></button></div> : null}
+        <div className="composer-row">
+          <label htmlFor={inputId} className="sr-only">{replyTarget ? "답글" : "댓글"}</label>
+          <input ref={inputRef} id={inputId} value={text} onChange={(event) => setText(event.target.value)} placeholder={auth.user ? (replyTarget ? "답글을 입력하세요" : targetType === "game" ? "이 게임에 한마디 남기기" : "짧은 댓글을 남겨보세요") : "Google 로그인 후 남길 수 있어요"} maxLength={MAX_COMMENT_LENGTH} />
+          <button className="send-button" type="submit" aria-label="보내기"><SendIcon /></button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
-function CommentRow({ comment, auth, onNotify, onReply }: { comment: Comment; auth: AuthState; onNotify: (message: string) => void; onReply?: () => void }) {
+function Bubble({ comment, mine, auth, onNotify, onReply }: { comment: Comment; mine: boolean; auth: AuthState; onNotify: Notify; onReply?: () => void }) {
   const removable = canDelete(auth, comment.authorId);
-  return <div className="comment-row"><span className="comment-avatar">{comment.authorName.slice(0, 1).toUpperCase()}</span><div><div className="comment-meta"><strong>{comment.authorName}</strong><time>{formatDate(comment.createdAt)}</time></div><p>{comment.text}</p>{onReply ? <button className="reply-button" type="button" onClick={onReply}>reply</button> : null}{removable ? <button className="reply-button danger" type="button" onClick={() => confirmDelete(comment.depth === 0 ? "이 댓글과 답글을 삭제할까요?" : "이 답글을 삭제할까요?", () => deleteComment(comment.id), "댓글을 삭제했습니다.", onNotify)}>delete</button> : null}</div></div>;
+  return (
+    <div className={`bubble-item${mine ? " is-mine" : ""}`}>
+      <span className="bubble-meta">{mine ? "나" : comment.authorName} · {formatDate(comment.createdAt)}</span>
+      <p className="bubble">{comment.text}</p>
+      {onReply || removable ? (
+        <span className="bubble-actions">
+          {onReply ? <button className="text-button" type="button" onClick={onReply}>답글</button> : null}
+          {removable ? <button className="text-button danger" type="button" onClick={() => confirmDelete(comment.depth === 0 ? "이 댓글과 답글을 삭제할까요?" : "이 답글을 삭제할까요?", () => deleteComment(comment.id), "댓글을 삭제했습니다.", onNotify)}>삭제</button> : null}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function canDelete(auth: AuthState, authorId: string): boolean {
   return Boolean(auth.user && (auth.isAdmin || auth.user.uid === authorId));
 }
 
-async function confirmDelete(question: string, remove: () => Promise<void>, done: string, onNotify: (message: string) => void) {
+async function confirmDelete(question: string, remove: () => Promise<void>, done: string, onNotify: Notify) {
   if (!window.confirm(question)) return;
   try {
     await remove();
@@ -550,7 +659,228 @@ async function confirmDelete(question: string, remove: () => Promise<void>, done
   }
 }
 
-function AdminPage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; onNotify: (message: string) => void }) {
+/* ---------- Community ---------- */
+
+type PostSort = "latest" | "popular" | "preserved";
+const POST_SORTS: { id: PostSort; label: string }[] = [
+  { id: "latest", label: "최신" },
+  { id: "popular", label: "인기" },
+  { id: "preserved", label: "명예의 전당" },
+];
+
+function CommunityPage({ auth, posts, games, onNotify }: { auth: AuthState; posts: Post[]; games: Game[]; onNotify: Notify }) {
+  const [sort, setSort] = useState<PostSort>("latest");
+  const visible = useMemo(() => {
+    if (sort === "popular") return [...posts].sort((a, b) => b.likeCount - a.likeCount);
+    if (sort === "preserved") return posts.filter((post) => post.retentionStatus === "preserved");
+    return posts;
+  }, [posts, sort]);
+  const gamesById = useMemo(() => new Map(games.map((game) => [game.id, game])), [games]);
+
+  return (
+    <div className="community-page">
+      <header className="page-bar">
+        <h1>커뮤니티</h1>
+        <div className="segmented" role="group" aria-label="정렬">
+          {POST_SORTS.map((item) => <button key={item.id} type="button" aria-pressed={sort === item.id} onClick={() => setSort(item.id)}>{item.label}</button>)}
+        </div>
+      </header>
+      <div className="feed">
+        <p className="notice-box">게시글은 한 달 뒤 정리돼요. 매월 좋아요 10개 이상인 1위 글은 명예의 전당에 남아요.</p>
+        {visible.length
+          ? visible.map((post) => <PostCard key={post.id} post={post} game={post.gameId ? gamesById.get(post.gameId) : undefined} auth={auth} onNotify={onNotify} />)
+          : <p className="empty-note">{sort === "preserved" ? "아직 명예의 전당에 오른 글이 없어요." : "아직 글이 없어요. 첫 글을 남겨보세요."}</p>}
+      </div>
+      <PostComposer auth={auth} games={games} onNotify={onNotify} />
+    </div>
+  );
+}
+
+function PostComposer({ auth, games, onNotify }: { auth: AuthState; games: Game[]; onNotify: Notify }) {
+  const [text, setText] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const linked = games.find((game) => game.id === gameId);
+  const options = filterGames(games, pickerQuery).slice(0, 8);
+  const locked = !auth.user || saving;
+
+  function clearImage() {
+    setImage(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function pickGame(id: string) {
+    setGameId(id);
+    setPickerOpen(false);
+    setPickerQuery("");
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!auth.user) return onNotify("글을 작성하려면 Google 로그인이 필요합니다.");
+    const textError = validatePostText(text);
+    if (textError) return onNotify(textError);
+    if (image) {
+      const imageError = validateImage(image);
+      if (imageError) return onNotify(imageError);
+    }
+    setSaving(true);
+    try {
+      const result = await createPost(text.trim(), Boolean(image), gameId ?? undefined);
+      if (image && result.imagePath) await uploadBoardImage(result.postId, image);
+      setText("");
+      clearImage();
+      setGameId(null);
+      onNotify("게시글을 올렸습니다.");
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "게시글을 올리지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="composer-dock">
+      {pickerOpen ? (
+        <div className="game-picker" role="dialog" aria-label="연결할 게임 고르기" onKeyDown={(event) => { if (event.key === "Escape") setPickerOpen(false); }}>
+          <label htmlFor="game-picker-search" className="sr-only">게임 찾기</label>
+          <input id="game-picker-search" autoFocus value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="게임 이름으로 찾기" autoComplete="off" />
+          {options.length ? (
+            <ul className="game-picker-list">
+              {options.map((game) => (
+                <li key={game.id}>
+                  <button className="picker-option" type="button" aria-pressed={game.id === gameId} onClick={() => pickGame(game.id)}>
+                    <span className="picker-thumb" style={game.coverUrl ? { backgroundImage: `url(${game.coverUrl})` } : undefined} aria-hidden="true" />
+                    <span className="picker-title">{game.title}</span>
+                    {game.id === gameId ? <CheckIcon /> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="empty-note">맞는 게임이 없어요.</p>}
+        </div>
+      ) : null}
+      <form className="composer" onSubmit={submit}>
+        {linked || image ? (
+          <div className="composer-attachments">
+            {linked ? <span className="attach-chip"><GamepadIcon />{linked.title}<button type="button" onClick={() => setGameId(null)} aria-label="게임 연결 해제"><CloseIcon /></button></span> : null}
+            {image ? <span className="attach-chip"><ImageIcon />{image.name}<button type="button" onClick={clearImage} aria-label="이미지 빼기"><CloseIcon /></button></span> : null}
+          </div>
+        ) : null}
+        <div className="composer-row">
+          <button className="round-button quiet" type="button" onClick={() => fileRef.current?.click()} disabled={locked} aria-label="이미지 첨부"><ImageIcon /></button>
+          <input ref={fileRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" tabIndex={-1} aria-hidden="true" onChange={(event) => setImage(event.target.files?.[0] ?? null)} />
+          <button className={`round-button quiet${pickerOpen ? " is-active" : ""}`} type="button" onClick={() => setPickerOpen((value) => !value)} disabled={locked || !games.length} aria-label="게임 연결" aria-expanded={pickerOpen}><GamepadIcon /></button>
+          <label htmlFor="post-text" className="sr-only">새 글</label>
+          <input id="post-text" value={text} onChange={(event) => setText(event.target.value)} placeholder={auth.user ? "작업실에 짧은 글을 남겨보세요" : "Google 로그인 후 글을 남길 수 있어요"} maxLength={MAX_POST_LENGTH} disabled={locked} />
+          <button className="send-button" type="submit" disabled={locked} aria-label={saving ? "올리는 중" : "올리기"}><SendIcon /></button>
+        </div>
+      </form>
+      <p className="composer-note">이미지 한 장 · 게임 하나까지 연결 · {text.length}/{MAX_POST_LENGTH}자</p>
+    </div>
+  );
+}
+
+function PostCard({ post, game, auth, onNotify }: { post: Post; game?: Game; auth: AuthState; onNotify: Notify }) {
+  const [expanded, setExpanded] = useState(false);
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.likeCount);
+  const month = Number(post.monthKey.split("-")[1]);
+
+  async function like() {
+    if (!auth.user) return onNotify("좋아요를 누르려면 Google 로그인이 필요합니다.");
+    try {
+      const result = await toggleLike("post", post.id);
+      setLiked(result.liked);
+      setLikeCount(result.likeCount);
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "좋아요 처리에 실패했습니다.");
+    }
+  }
+
+  return (
+    <article className="post">
+      <span className="avatar" aria-hidden="true">{initialOf(post.authorName)}</span>
+      <div className="post-body">
+        <div className="post-meta">
+          <strong>{post.authorName}</strong>
+          {post.retentionStatus === "preserved" ? <span className="hall-badge">명예의 전당{month ? ` · ${month}월` : ""}</span> : null}
+          <time>{formatDate(post.createdAt)}</time>
+        </div>
+        <p className="post-text">{post.text}</p>
+        {post.imageUrl ? <img className="post-image" src={post.imageUrl} alt="게시글 첨부 이미지" /> : null}
+        {game ? <GameLinkCard game={game} /> : null}
+        <div className="post-actions">
+          <button className={`text-action${liked ? " is-liked" : ""}`} type="button" onClick={like} aria-pressed={liked}>{liked ? "♥" : "♡"} {likeCount}</button>
+          <button className="text-action" type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>댓글 {post.commentCount}</button>
+          {canDelete(auth, post.authorId) ? <button className="text-action danger" type="button" onClick={() => confirmDelete("이 게시글과 댓글을 모두 삭제할까요?", () => deletePost(post.id), "게시글을 삭제했습니다.", onNotify)}>삭제</button> : null}
+        </div>
+        {expanded ? <CommentThread targetType="post" targetId={post.id} auth={auth} onNotify={onNotify} /> : null}
+      </div>
+    </article>
+  );
+}
+
+function GameLinkCard({ game }: { game: Game }) {
+  return (
+    <Link className="game-link" to={`/game/${game.id}`}>
+      <span className="game-link-thumb" style={game.coverUrl ? { backgroundImage: `url(${game.coverUrl})` } : undefined} aria-hidden="true" />
+      <span className="game-link-copy"><strong>{game.title}</strong><span>{[genreText(game), accessShortLabel(game.accessLevel)].filter(Boolean).join(" · ")}</span></span>
+      <span className="game-link-play"><PlayIcon />플레이</span>
+    </Link>
+  );
+}
+
+/* ---------- About ---------- */
+
+const ACCESS_TIERS: { level: AccessLevel; title: string; text: string }[] = [
+  { level: "public", title: "공개", text: "누구나 로그인 없이 플레이" },
+  { level: "login", title: "로그인 데모", text: "Google 로그인하면 플레이" },
+  { level: "subscriber", title: "구독자 프로토타입", text: "YouTube 채널 구독자. 매주 몇 편은 모두에게 무료로 열려요." },
+  { level: "member", title: "멤버 얼리 액세스", text: "YouTube 채널 멤버가 가장 먼저 플레이" },
+];
+
+function AboutPage() {
+  return (
+    <div className="about-page">
+      <section className="about-hero">
+        <div className="about-art" aria-hidden="true"><Suspense fallback={<img src={logoUrl} alt="" />}><GemForge /></Suspense></div>
+        <h1>지금 만들고 있는 게임,<br />먼저 플레이하세요.</h1>
+        <p className="about-lede">Atelier는 Material Stone Games가 만드는 게임과 작은 실험들을 모아두는 작업실입니다. 완성된 게임부터 아직 흔들리는 프로토타입까지, 설치 없이 브라우저에서 바로 해볼 수 있어요.</p>
+        <div className="about-actions">
+          <Link className="button button-primary" to="/">게임 둘러보기</Link>
+          <a className="button button-quiet" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">YouTube 채널 ↗</a>
+          {discordUrl
+            ? <a className="button button-quiet" href={discordUrl} target="_blank" rel="noreferrer">Discord ↗</a>
+            : <span className="button button-disabled" aria-disabled="true" title="Discord 서버는 준비 중이에요">Discord <span className="soon-badge">준비 중</span></span>}
+        </div>
+      </section>
+      <section className="about-section">
+        <h2>이렇게 즐겨요</h2>
+        <ol className="step-grid">
+          <li><span>01</span><strong>골라서 바로 플레이</strong><p>홈에서 게임 이름이나 #장르 태그로 찾고, 누르면 그 자리에서 시작돼요.</p></li>
+          <li><span>02</span><strong>한마디 남기기</strong><p>플레이한 소감이 다음 빌드를 만들어요. 좋아요와 댓글은 Google 로그인 후에.</p></li>
+          <li><span>03</span><strong>커뮤니티에 흔적 남기기</strong><p>짧은 글과 이미지 한 장, 게임 하나를 연결할 수 있어요. 달마다 1위 글은 남아요.</p></li>
+        </ol>
+      </section>
+      <section className="about-section">
+        <h2>누가 어떤 게임을 할 수 있나요</h2>
+        <ul className="tier-table">
+          {ACCESS_TIERS.map((tier) => <li key={tier.level} className={`tier-row ${tier.level}`}><span className="tier-dot" aria-hidden="true" /><strong>{tier.title}</strong><span>{tier.text}</span></li>)}
+        </ul>
+      </section>
+      <footer className="about-foot"><span>A small workshop by Material Stone Games</span><Link to="/privacy">개인정보처리방침</Link></footer>
+    </div>
+  );
+}
+
+/* ---------- Admin ---------- */
+
+function AdminPage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; onNotify: Notify }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [genres, setGenres] = useState("");
@@ -572,8 +902,8 @@ function AdminPage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; 
   }, [title]);
 
   if (auth.loading) return <LoadingState />;
-  if (!auth.user) return <PermissionPanel title="Admin access" text="관리자 페이지는 Google 로그인 후 이용할 수 있습니다." />;
-  if (!auth.isAdmin) return <PermissionPanel title="Not on the list" text="이 Google 계정에는 Atelier 관리자 권한이 없습니다." />;
+  if (!auth.user) return <PermissionPanel title="관리자 전용" text="업로드 룸은 Google 로그인 후 이용할 수 있습니다." />;
+  if (!auth.isAdmin) return <PermissionPanel title="권한이 없어요" text="이 Google 계정에는 Atelier 관리자 권한이 없습니다." />;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -606,7 +936,7 @@ function AdminPage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; 
       const buildInput = document.getElementById("game-build") as HTMLInputElement | null;
       if (coverInput) coverInput.value = "";
       if (buildInput) buildInput.value = "";
-      onNotify("게임 업로드를 시작했습니다. 처리 완료 후 허브에 공개됩니다.");
+      onNotify("게임 업로드를 시작했습니다. 처리 완료 후 홈에 공개됩니다.");
     } catch (error) {
       setStatus("");
       onNotify(error instanceof Error ? error.message : "업로드에 실패했습니다.");
@@ -615,12 +945,31 @@ function AdminPage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; 
     }
   }
 
-  return <div className="admin-page page-container"><section className="page-heading compact"><div><p className="eyebrow">STUDIO CONTROL / PRIVATE</p><h1>Upload <em>room</em></h1></div><p className="heading-note">새로운 작업물을 작업실에<br />들여놓습니다.</p></section><div className="admin-layout"><form className="upload-form" onSubmit={submit}><div className="form-section"><span className="form-number">01</span><div className="field-group"><label htmlFor="game-title">Game title</label><input id="game-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="예: Ember Archive" maxLength={80} /><span className="field-hint">동일한 제목의 게임은 기존 항목 수정 여부를 안내합니다.</span>{existing ? <div className="duplicate-alert"><strong>Existing game found</strong><p><b>{existing.title}</b>의 새 빌드로 업데이트합니다. 좋아요와 댓글은 유지됩니다.</p></div> : null}</div></div><div className="form-section"><span className="form-number">02</span><div className="field-group"><label htmlFor="game-description">Description</label><textarea id="game-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="게임 상세 페이지에 보일 짧은 소개" maxLength={500} /><label htmlFor="game-genres">Genre tags</label><input id="game-genres" value={genres} onChange={(event) => setGenres(event.target.value)} placeholder="Adventure, Puzzle, Cozy" /><span className="field-hint">쉼표로 구분해 최대 8개까지 입력합니다.</span></div></div><div className="form-section"><span className="form-number">03</span><div className="field-group"><label htmlFor="game-access">Access level</label><select id="game-access" value={accessLevel} onChange={(event) => setAccessLevel(event.target.value as typeof accessLevel)}><option value="public">Public — everyone</option><option value="login">Demo — Google login</option><option value="subscriber">Prototype — YouTube subscriber (주간 무료 로테이션 대상)</option><option value="member">Early access — channel member</option><option value="private">Private — invited emails only</option></select>{accessLevel === "private" ? <><label htmlFor="game-allowed-emails">Invited emails</label><textarea id="game-allowed-emails" value={allowedEmails} onChange={(event) => setAllowedEmails(event.target.value)} placeholder={"friend@gmail.com\ntester@example.com"} /><span className="field-hint">쉼표나 줄바꿈으로 구분합니다. 이 Google 계정으로 로그인한 사람(과 관리자)에게만 보입니다.</span></> : null}</div></div><div className="form-section"><span className="form-number">04</span><div className="field-group"><label htmlFor="game-cover">Cover image</label><label className="drop-field" htmlFor="game-cover"><span>{cover ? cover.name : "Choose JPG, PNG, or WebP"}</span><small>MAX 5MB</small><input id="game-cover" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setCover(event.target.files?.[0] ?? null)} /></label></div></div><div className="form-section"><span className="form-number">05</span><div className="field-group"><label htmlFor="game-build">Web build ZIP</label><label className="drop-field build-field" htmlFor="game-build"><span>{build ? build.name : "Choose your playable build"}</span><small>MAX {Math.round(MAX_BUILD_BYTES / 1024 / 1024)}MiB · ROOT INDEX.HTML</small><input id="game-build" type="file" accept=".zip,application/zip" onChange={(event) => setBuild(event.target.files?.[0] ?? null)} /></label></div></div><button className="button button-primary submit-upload" type="submit" disabled={saving}>{saving ? `Uploading ${progress}%` : existing ? "Update game build →" : "Publish to hub →"}</button>{status ? <p className="upload-status"><span className={progress === 100 ? "live-dot" : "spinner-dot"} />{status}</p> : null}</form><aside className="admin-aside"><div className="aside-note"><span className="eyebrow">UPLOAD CHECKLIST</span><ol><li>index.html은 ZIP 루트에 있어야 합니다.</li><li>상대 경로로 연결된 웹빌드만 지원합니다.</li><li>압축 해제 후 검사에 통과한 빌드만 공개됩니다.</li></ol></div><div className="aside-list"><span className="eyebrow">CURRENT CATALOGUE</span>{games.slice(0, 6).map((game) => <div className="mini-game" key={game.id}><span>{game.title}</span><small>{accessLabel(game.accessLevel)}</small></div>)}</div></aside></div><AdminTools onNotify={onNotify} /></div>;
+  return <div className="admin-page page-container"><section className="page-heading"><div><p className="eyebrow">STUDIO CONTROL / PRIVATE</p><h1>업로드 룸</h1></div><p className="heading-note">새로운 작업물을 작업실에 들여놓습니다.</p></section><div className="admin-layout"><form className="upload-form" onSubmit={submit}><div className="form-section"><span className="form-number">01</span><div className="field-group"><label htmlFor="game-title">Game title</label><input id="game-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="예: Ember Archive" maxLength={80} /><span className="field-hint">동일한 제목의 게임은 기존 항목 수정 여부를 안내합니다.</span>{existing ? <div className="duplicate-alert"><strong>Existing game found</strong><p><b>{existing.title}</b>의 새 빌드로 업데이트합니다. 좋아요와 댓글은 유지됩니다.</p></div> : null}</div></div><div className="form-section"><span className="form-number">02</span><div className="field-group"><label htmlFor="game-description">Description</label><textarea id="game-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={"게임 소개와 조작법\n예: 조작: 방향키로 이동"} maxLength={500} /><span className="field-hint">줄바꿈이 그대로 보입니다. 조작법은 여기에 적어 주세요.</span><label htmlFor="game-genres">Genre tags</label><input id="game-genres" value={genres} onChange={(event) => setGenres(event.target.value)} placeholder="Adventure, Puzzle, Cozy" /><span className="field-hint">쉼표로 구분해 최대 8개까지 입력합니다. 홈의 장르 태그 검색에 쓰입니다.</span></div></div><div className="form-section"><span className="form-number">03</span><div className="field-group"><label htmlFor="game-access">Access level</label><select id="game-access" value={accessLevel} onChange={(event) => setAccessLevel(event.target.value as typeof accessLevel)}><option value="public">Public — everyone</option><option value="login">Demo — Google login</option><option value="subscriber">Prototype — YouTube subscriber (주간 무료 로테이션 대상)</option><option value="member">Early access — channel member</option><option value="private">Private — invited emails only</option></select>{accessLevel === "private" ? <><label htmlFor="game-allowed-emails">Invited emails</label><textarea id="game-allowed-emails" value={allowedEmails} onChange={(event) => setAllowedEmails(event.target.value)} placeholder={"friend@gmail.com\ntester@example.com"} /><span className="field-hint">쉼표나 줄바꿈으로 구분합니다. 이 Google 계정으로 로그인한 사람(과 관리자)에게만 보입니다.</span></> : null}</div></div><div className="form-section"><span className="form-number">04</span><div className="field-group"><label htmlFor="game-cover">Cover image</label><label className="drop-field" htmlFor="game-cover"><span>{cover ? cover.name : "Choose JPG, PNG, or WebP"}</span><small>MAX 5MB</small><input id="game-cover" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setCover(event.target.files?.[0] ?? null)} /></label></div></div><div className="form-section"><span className="form-number">05</span><div className="field-group"><label htmlFor="game-build">Web build ZIP</label><label className="drop-field build-field" htmlFor="game-build"><span>{build ? build.name : "Choose your playable build"}</span><small>MAX {Math.round(MAX_BUILD_BYTES / 1024 / 1024)}MiB · ROOT INDEX.HTML</small><input id="game-build" type="file" accept=".zip,application/zip" onChange={(event) => setBuild(event.target.files?.[0] ?? null)} /></label></div></div><button className="button button-primary submit-upload" type="submit" disabled={saving}>{saving ? `Uploading ${progress}%` : existing ? "Update game build →" : "Publish to Atelier →"}</button>{status ? <p className="upload-status"><span className={progress === 100 ? "live-dot" : "spinner-dot"} />{status}</p> : null}</form><aside className="admin-aside"><div className="aside-note"><span className="eyebrow">UPLOAD CHECKLIST</span><ol><li>index.html은 ZIP 루트에 있어야 합니다.</li><li>상대 경로로 연결된 웹빌드만 지원합니다.</li><li>압축 해제 후 검사에 통과한 빌드만 공개됩니다.</li></ol></div><div className="aside-list"><span className="eyebrow">CURRENT CATALOGUE</span>{games.slice(0, 6).map((game) => <div className="mini-game" key={game.id}><span>{game.title}</span><small>{accessLabel(game.accessLevel)}</small></div>)}</div></aside></div><AdminTools onNotify={onNotify} /></div>;
 }
 
-function PermissionPanel({ title, text }: { title: string; text: string }) { return <div className="center-state page-container"><span className="state-symbol">✳</span><h1>{title}</h1><p>{text}</p><Link className="button button-primary" to="/hub">Return to hub</Link></div>; }
-function EmptyState({ title, text }: { title: string; text: string }) { return <div className="center-state page-container"><span className="state-symbol">○</span><h1>{title}</h1><p>{text}</p><Link className="button button-primary" to="/hub">Return to hub</Link></div>; }
-function LoadingState() { return <div className="center-state page-container"><span className="spinner-large" /><p>Loading Atelier…</p></div>; }
-function Footer() { return <footer className="site-footer"><div><span className="footer-mark">ATELIER / 2026</span><p>A small workshop by Material Stone Games.</p></div><div><a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">YouTube ↗</a>{discordUrl ? <a href={discordUrl} target="_blank" rel="noreferrer">Discord ↗</a> : null}<Link to="/privacy">개인정보처리방침</Link></div></footer>; }
+function PermissionPanel({ title, text }: { title: string; text: string }) { return <div className="center-state"><span className="state-symbol">✳</span><h1>{title}</h1><p>{text}</p><Link className="button button-primary" to="/">홈으로</Link></div>; }
+function EmptyState({ title, text }: { title: string; text: string }) { return <div className="center-state"><span className="state-symbol">○</span><h1>{title}</h1><p>{text}</p><Link className="button button-primary" to="/">홈으로</Link></div>; }
+function LoadingState() { return <div className="center-state"><span className="spinner-large" /><p>불러오는 중…</p></div>; }
 
-function formatDate(value: Game["createdAt"] | Post["createdAt"] | Comment["createdAt"]): string { if (!value) return "recently"; const date = value instanceof Date ? value : value.toDate(); return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(date); }
+function formatDate(value: Game["createdAt"] | Post["createdAt"] | Comment["createdAt"]): string { if (!value) return "방금"; const date = value instanceof Date ? value : value.toDate(); return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(date); }
+
+/* ---------- Icons (stroke icons inherit the text colour) ---------- */
+
+function Icon({ children, size = 18 }: { children: ReactNode; size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
+}
+function MenuIcon() { return <Icon size={22}><path d="M3 6h12M3 12h8" /></Icon>; }
+function CloseIcon() { return <Icon size={16}><path d="M4.5 4.5l9 9M13.5 4.5l-9 9" /></Icon>; }
+function HomeIcon() { return <Icon><path d="M3 8.5L9 3.5l6 5V15H3z" /></Icon>; }
+function ChatIcon() { return <Icon><path d="M3 4.5h12v8H8l-3.5 2.5v-2.5H3z" /></Icon>; }
+function InfoIcon() { return <Icon><circle cx="9" cy="9" r="6.5" /><path d="M9 8.2v4.3M9 5.6v.1" /></Icon>; }
+function UploadIcon() { return <Icon><path d="M9 12V3.5M5.5 7L9 3.5 12.5 7M3.5 12.5v2h11v-2" /></Icon>; }
+function PersonIcon() { return <Icon size={16}><circle cx="9" cy="6.5" r="3" /><path d="M3 16c.8-3 3.2-4.5 6-4.5s5.2 1.5 6 4.5" /></Icon>; }
+function SearchIcon() { return <Icon><circle cx="8" cy="8" r="5" /><path d="M12 12l3.5 3.5" /></Icon>; }
+function SendIcon() { return <Icon size={16}><path d="M9 14.5V4M4.5 8.5L9 4l4.5 4.5" /></Icon>; }
+function ImageIcon() { return <Icon><rect x="2.5" y="3.5" width="13" height="11" rx="2" /><circle cx="6.5" cy="7.5" r="1.3" /><path d="M15.5 12l-4-3.5-6 6" /></Icon>; }
+function GamepadIcon() { return <Icon><rect x="2" y="5" width="14" height="8.5" rx="4.25" /><path d="M6 7.5v3.5M4.25 9.25h3.5" /><path d="M12 8.3v.1M13.3 10.3v.1" /></Icon>; }
+function CheckIcon() { return <Icon size={16}><path d="M3.5 9.5l3.5 3.5 7.5-8" /></Icon>; }
+function FullscreenIcon() { return <Icon size={16}><path d="M2.5 6.5v-4h4M11.5 2.5h4v4M15.5 11.5v4h-4M6.5 15.5h-4v-4" /></Icon>; }
+function PlayIcon() { return <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.8v10.4l8.2-5.2z" fill="currentColor" /></svg>; }

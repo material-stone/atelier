@@ -158,6 +158,7 @@ function mapPost(snapshot: { id: string; data: () => Record<string, unknown> | u
     id: snapshot.id,
     text: String(data.text ?? ""),
     imagePath: typeof data.imagePath === "string" ? data.imagePath : null,
+    gameId: typeof data.gameId === "string" ? data.gameId : null,
     authorId: String(data.authorId ?? ""),
     authorName: String(data.authorName ?? "visitor"),
     likeCount: Number(data.likeCount ?? 0),
@@ -362,13 +363,13 @@ export async function uploadFile(
   });
 }
 
-export async function createPost(text: string, hasImage: boolean): Promise<{ postId: string; imagePath?: string }> {
+export async function createPost(text: string, hasImage: boolean, gameId?: string): Promise<{ postId: string; imagePath?: string }> {
   if (!functions) throw new Error("Firebase Functions 설정이 아직 연결되지 않았습니다.");
-  const callable = httpsCallable<{ text: string; hasImage: boolean }, { postId: string; imagePath?: string }>(
+  const callable = httpsCallable<{ text: string; hasImage: boolean; gameId?: string }, { postId: string; imagePath?: string }>(
     functions,
     "createPost",
   );
-  return (await callable({ text, hasImage })).data;
+  return (await callable({ text, hasImage, ...(gameId ? { gameId } : {}) })).data;
 }
 
 export async function toggleLike(targetType: TargetType, targetId: string): Promise<{ liked: boolean; likeCount: number }> {

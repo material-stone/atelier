@@ -81,7 +81,8 @@ export const demoPosts: Post[] = [
   },
   {
     id: "demo-post-2",
-    text: "어떤 장르의 프로토타입을 먼저 보고 싶나요?",
+    text: "Stone Drop 연쇄 7번 성공! 바닥에서 올라오는 돌을 기다렸다가 터뜨리는 게 요령이에요.",
+    gameId: "demo-stone-drop",
     authorId: "demo-author-2",
     authorName: "atelier visitor",
     likeCount: 6,
