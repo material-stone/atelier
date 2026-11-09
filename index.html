@@ -15,6 +15,15 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="Material Stone Games의 게임과 실험작을 만나는 Atelier." />
     <title>Atelier — Material Stone Games</title>
+    <!-- Apply a saved light/dark choice before first paint so the page does not flash the other theme. Mirrors src/lib/theme.ts. -->
+    <script>
+      try {
+        var theme = localStorage.getItem("atelier:theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+        var dark = theme === "dark" || (theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", dark ? "#212121" : "#ffffff");
+      } catch (error) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -10,6 +10,7 @@ import { accessLabel, accessPermission, accessShortLabel, parseEmailList, rotati
 import { APP_BASE_PATH } from "./lib/config";
 import { loadRecent, pushRecent, saveRecent } from "./lib/recent";
 import { filterGames, popularGenres } from "./lib/search";
+import { applyTheme, loadTheme, saveTheme, watchSystemTheme, type ThemePreference } from "./lib/theme";
 import {
   createComment,
   createOrUpdateGameDraft,
@@ -80,7 +81,15 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
   const [notice, setNotice] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>(() => loadRecent());
+  const [theme, setTheme] = useState<ThemePreference>(() => loadTheme());
   const location = useLocation();
+
+  useEffect(() => {
+    applyTheme(theme);
+    saveTheme(theme);
+    // Following the system means the browser bar colour has to follow it too.
+    if (theme === "system") return watchSystemTheme(() => applyTheme("system"));
+  }, [theme]);
 
   useEffect(() => {
     setNotice(null);
@@ -115,7 +124,7 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
     <div className="app-shell">
       <TopBar auth={auth} drawerOpen={drawerOpen} onMenu={() => setDrawerOpen(true)} onNotify={notify} />
       <div className={`sidebar-scrim${drawerOpen ? " is-open" : ""}`} onClick={() => setDrawerOpen(false)} aria-hidden="true" />
-      <Sidebar auth={auth} games={games} recent={recent} open={drawerOpen} onClose={() => setDrawerOpen(false)} onNotify={notify} />
+      <Sidebar auth={auth} games={games} recent={recent} theme={theme} onTheme={setTheme} open={drawerOpen} onClose={() => setDrawerOpen(false)} onNotify={notify} />
       <main className="app-main">
         <Routes>
           <Route path="/" element={<HomePage games={games} />} />
@@ -177,7 +186,21 @@ function TopBar({ auth, drawerOpen, onMenu, onNotify }: { auth: AuthState; drawe
   );
 }
 
-function Sidebar({ auth, games, recent, open, onClose, onNotify }: { auth: AuthState; games: Game[]; recent: string[]; open: boolean; onClose: () => void; onNotify: Notify }) {
+const THEME_OPTIONS: { id: ThemePreference; label: string; icon: () => ReactNode }[] = [
+  { id: "system", label: "시스템", icon: () => <MonitorIcon /> },
+  { id: "light", label: "라이트", icon: () => <SunIcon /> },
+  { id: "dark", label: "다크", icon: () => <MoonIcon /> },
+];
+
+function ThemeSwitch({ theme, onTheme }: { theme: ThemePreference; onTheme: (theme: ThemePreference) => void }) {
+  return (
+    <div className="theme-switch" role="group" aria-label="화면 모드">
+      {THEME_OPTIONS.map((option) => <button key={option.id} type="button" aria-pressed={theme === option.id} onClick={() => onTheme(option.id)}>{option.icon()}<span>{option.label}</span></button>)}
+    </div>
+  );
+}
+
+function Sidebar({ auth, games, recent, theme, onTheme, open, onClose, onNotify }: { auth: AuthState; games: Game[]; recent: string[]; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; open: boolean; onClose: () => void; onNotify: Notify }) {
   const handleAuth = useAuthAction(auth, onNotify);
   const rotation = useMemo(() => rotationForGames(games), [games]);
   const recentGames = recent.map((id) => games.find((game) => game.id === id)).filter((game): game is Game => Boolean(game));
@@ -217,6 +240,7 @@ function Sidebar({ auth, games, recent, open, onClose, onNotify }: { auth: AuthS
             ? <><span className="avatar" aria-hidden="true">{initialOf(getDisplayName(auth.user))}</span><span className="account-copy"><strong>{getDisplayName(auth.user)}</strong><small>눌러서 로그아웃</small></span></>
             : <><span className="avatar avatar-empty" aria-hidden="true"><PersonIcon /></span><span className="account-copy"><strong>Google로 로그인</strong><small>좋아요·댓글을 남기려면</small></span></>}
         </button>
+        <ThemeSwitch theme={theme} onTheme={onTheme} />
         <div className="sidebar-links">
           <a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">YouTube ↗</a>
           <Link to="/privacy">개인정보처리방침</Link>
@@ -972,4 +996,7 @@ function ImageIcon() { return <Icon><rect x="2.5" y="3.5" width="13" height="11"
 function GamepadIcon() { return <Icon><rect x="2" y="5" width="14" height="8.5" rx="4.25" /><path d="M6 7.5v3.5M4.25 9.25h3.5" /><path d="M12 8.3v.1M13.3 10.3v.1" /></Icon>; }
 function CheckIcon() { return <Icon size={16}><path d="M3.5 9.5l3.5 3.5 7.5-8" /></Icon>; }
 function FullscreenIcon() { return <Icon size={16}><path d="M2.5 6.5v-4h4M11.5 2.5h4v4M15.5 11.5v4h-4M6.5 15.5h-4v-4" /></Icon>; }
+function MonitorIcon() { return <Icon size={15}><rect x="2.5" y="3" width="13" height="9" rx="1.5" /><path d="M6.5 15h5M9 12v3" /></Icon>; }
+function SunIcon() { return <Icon size={15}><circle cx="9" cy="9" r="3" /><path d="M9 2v1.5M9 14.5V16M2 9h1.5M14.5 9H16M4 4l1 1M13 13l1 1M4 14l1-1M13 5l1-1" /></Icon>; }
+function MoonIcon() { return <Icon size={15}><path d="M14.5 11A6 6 0 0 1 7 3.5a6 6 0 1 0 7.5 7.5z" /></Icon>; }
 function PlayIcon() { return <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.8v10.4l8.2-5.2z" fill="currentColor" /></svg>; }

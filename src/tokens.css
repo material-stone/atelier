@@ -18,6 +18,18 @@
   --ink-700: #333333;
   --ink-950: #0d0d0d;
 
+  /* Night and mist: the dark theme's neutrals and its text. */
+  --night-950: #181818;
+  --night-900: #212121;
+  --night-850: #2a2a2a;
+  --night-800: #303030;
+  --night-700: #3a3a3a;
+  --night-600: #4a4a4a;
+  --mist-100: #ececec;
+  --mist-200: #cfcfcf;
+  --mist-400: #b4b4b4;
+  --mist-500: #9a9a9a;
+
   /* Stone: the dark neutrals behind a game screen. */
   --stone-950: #080a0c;
   --stone-900: #101418;
@@ -25,16 +37,23 @@
 
   /* Gem: the blue of the logo gem. 500 is the gem body, 400 its lit facet, 700 its shadow side. */
   --gem-50: #e6edff;
+  --gem-200: #a9c0ff;
+  --gem-300: #8fb0ff;
   --gem-400: #5f8bff;
   --gem-500: #2350e0;
   --gem-700: #1a3db0;
   --gem-800: #142f8a;
+  --gem-900: #1c2a52;
 
-  /* Status and tier hues, dark enough to read as text on paper. */
+  /* Status and tier hues: 700s read as text on paper, 300/400s on night. */
   --ember-700: #c2410c;
+  --ember-400: #ff8a5c;
   --moss-700: #2f6b1e;
+  --moss-400: #8fcf6a;
   --violet-700: #6941c6;
+  --violet-300: #b79bff;
   --red-700: #c62828;
+  --red-400: #ff6b6b;
 
   /* ---- Primitives: type ---- */
   --font-sans: ui-sans-serif, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
@@ -91,7 +110,87 @@
   --tier-member: var(--violet-700);
   --tier-private: var(--ember-700);
 
+  /* ---- Semantic: badges ---- */
+  --hall-bg: #fff1d6;                        /* hall-of-fame badge */
+  --hall-text: #7a4a00;
+
   /* ---- Semantic: layout ---- */
   --sidebar-width: 260px;
   --topbar-height: 0px;                      /* the phone top bar sets this to 56px */
+
+  color-scheme: light;
+}
+
+/*
+ * Dark theme. It follows the system setting unless the visitor picked a theme in the sidebar,
+ * which sets data-theme on <html>. The same overrides appear twice because CSS cannot share one
+ * block between a media query and an attribute selector; keep the two lists identical.
+ * Only semantic tokens change, so components need no dark-specific rules.
+ */
+:root[data-theme="dark"] {
+  --color-bg: var(--night-900);
+  --color-sidebar: var(--night-950);
+  --color-surface: var(--night-850);
+  --color-surface-raised: var(--night-800);
+  --color-screen: var(--stone-950);
+  --color-scrim: color-mix(in srgb, #000 60%, transparent);
+  --color-line: var(--night-700);
+  --color-line-strong: var(--night-600);
+  --color-text: var(--mist-100);
+  --color-text-soft: var(--mist-200);
+  --color-text-muted: var(--mist-400);       /* 8.1:1 on night-900, 6.5:1 on night-800 */
+  --color-text-placeholder: var(--mist-500); /* 5.9:1 on night-900, 4.7:1 on night-800 */
+  --accent: var(--gem-300);                  /* 7.4:1 on night-900 */
+  --accent-strong: var(--gem-200);
+  --accent-fill: var(--gem-500);
+  --accent-fill-hover: var(--gem-400);
+  --accent-soft: var(--gem-900);
+  --accent-line: color-mix(in srgb, var(--gem-400) 55%, transparent);
+  --heat: var(--ember-400);
+  --heat-soft: color-mix(in srgb, var(--ember-400) 14%, transparent);
+  --success: var(--moss-400);
+  --danger: var(--red-400);
+  --tier-public: var(--moss-400);
+  --tier-login: var(--mist-400);
+  --tier-subscriber: var(--gem-300);
+  --tier-member: var(--violet-300);
+  --tier-private: var(--ember-400);
+  --hall-bg: #3d2e12;
+  --hall-text: #ffd58a;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: var(--night-900);
+    --color-sidebar: var(--night-950);
+    --color-surface: var(--night-850);
+    --color-surface-raised: var(--night-800);
+    --color-screen: var(--stone-950);
+    --color-scrim: color-mix(in srgb, #000 60%, transparent);
+    --color-line: var(--night-700);
+    --color-line-strong: var(--night-600);
+    --color-text: var(--mist-100);
+    --color-text-soft: var(--mist-200);
+    --color-text-muted: var(--mist-400);
+    --color-text-placeholder: var(--mist-500);
+    --accent: var(--gem-300);
+    --accent-strong: var(--gem-200);
+    --accent-fill: var(--gem-500);
+    --accent-fill-hover: var(--gem-400);
+    --accent-soft: var(--gem-900);
+    --accent-line: color-mix(in srgb, var(--gem-400) 55%, transparent);
+    --heat: var(--ember-400);
+    --heat-soft: color-mix(in srgb, var(--ember-400) 14%, transparent);
+    --success: var(--moss-400);
+    --danger: var(--red-400);
+    --tier-public: var(--moss-400);
+    --tier-login: var(--mist-400);
+    --tier-subscriber: var(--gem-300);
+    --tier-member: var(--violet-300);
+    --tier-private: var(--ember-400);
+    --hall-bg: #3d2e12;
+    --hall-text: #ffd58a;
+    color-scheme: dark;
+  }
 }
