@@ -1,0 +1,7 @@
+node_modules/
+out/
+public/data/
+public/covers/
+public/voice/
+public/sfx/
+public/music/workbench-loop.wav

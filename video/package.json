@@ -1,0 +1,30 @@
+{
+  "name": "atelier-intro-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch": "node scripts/fetch-games.mjs",
+    "voice": "node scripts/make-voice.mjs",
+    "sfx": "node scripts/make-sfx.mjs",
+    "prepare-all": "npm run fetch && npm run sfx && npm run voice && npm run music",
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts AtelierIntro out/atelier-intro.mp4",
+    "typecheck": "tsc --noEmit",
+    "music": "node scripts/make-music.mjs",
+    "thumbnail": "remotion still src/index.ts Thumbnail out/atelier-thumbnail.jpg --image-format=jpeg --jpeg-quality=90 --scale=0.6667",
+    "render:reel": "remotion render src/index.ts AtelierReel out/atelier-reel.mp4",
+    "reel-cover": "remotion still src/index.ts ReelCover out/atelier-reel-cover.jpg --image-format=jpeg --jpeg-quality=90"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.536",
+    "@remotion/google-fonts": "4.0.536",
+    "@remotion/media": "4.0.536",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.536"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.8",
+    "typescript": "5.8.3"
+  }
+}

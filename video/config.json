@@ -1,0 +1,100 @@
+{
+  "tts": {
+    "engine": "edge",
+    "voice": "ko-KR-HyunsuMultilingualNeural",
+    "rate": "+10%"
+  },
+  "siteUrl": "material-stone-games.github.io/atelier",
+  "benchGameId": "PyKA5stDplqcW1l758Sk",
+  "wipGameIds": [
+    "1776008735023-6zra5zxmh05"
+  ],
+  "gameLines": {
+    "1775969989176-rjq8d9a2mmf": {
+      "sub": "벽을 넘나드는 스네이크."
+    },
+    "1776008735023-6zra5zxmh05": {
+      "sub": "지금도 다듬는 중인 판타지 아이들."
+    },
+    "1776041462795-nry8xpuock8": {
+      "sub": "돌벽을 깨는 벽돌깨기."
+    },
+    "1776041622137-ia73d3xl9k": {
+      "sub": "문양을 맞추는 짝맞추기."
+    },
+    "1776041651246-rusxbfhthc": {
+      "sub": "단어를 막는 타이핑 디펜스."
+    },
+    "1776041678975-4m1x5ho1tx": {
+      "sub": "30초 두더지 잡기.",
+      "say": "삼십 초 두더지 잡기."
+    },
+    "5OCGHIqUVHD8Q81nnS6X": {
+      "sub": "원을 터뜨리는 펄스 탭."
+    }
+  },
+  "gameNotes": {
+    "1775969989176-rjq8d9a2mmf": "벽을 넘으면 반대편으로. 먹을수록 길에 바위가 솟아요.",
+    "1776008735023-6zra5zxmh05": "기사가 스스로 달리며 적을 처치하는 방치형 RPG.",
+    "1776041462795-nry8xpuock8": "불씨 공으로 돌벽을 부수는 블록 깨기. 불꽃 돌은 주변까지 터져요.",
+    "1776041622137-ia73d3xl9k": "돌판을 두 장씩 뒤집어 같은 문양을 찾는 기억력 게임.",
+    "1776041651246-rusxbfhthc": "떨어지는 단어가 바닥에 닿기 전에 입력해 막아내요.",
+    "1776041678975-4m1x5ho1tx": "30초 동안 튀어나오는 두더지를 망치로 내려쳐요.",
+    "5OCGHIqUVHD8Q81nnS6X": "20초 동안 나타나는 원을 사라지기 전에 탭해요."
+  },
+  "bench": {
+    "kicker": "PROTOTYPE · SUBSCRIBER",
+    "headline": "순서를 짜는 게임",
+    "points": [
+      "무기를 타임라인에 배치",
+      "순서를 이으면 연계 기술",
+      "상점 · 대장간 · 보물상자"
+    ]
+  },
+  "music": {
+    "src": "music/workbench-loop.wav",
+    "credit": "Workbench Loop — 이 영상을 위해 코드로 만든 곡"
+  },
+  "credits": [
+    {
+      "head": "기획 · 개발 · 게임",
+      "body": [
+        "Material Stone Games"
+      ]
+    },
+    {
+      "head": "수록 게임",
+      "body": [
+        "{games}"
+      ]
+    },
+    {
+      "head": "레퍼런스",
+      "body": [
+        "Kurzgesagt — 제작 과정",
+        "\"What is Patreon and How Does it Work?\"",
+        "GitHub Unwrapped (Remotion)"
+      ]
+    },
+    {
+      "head": "내레이션",
+      "body": [
+        "{voice}"
+      ]
+    },
+    {
+      "head": "사용한 무료 도구",
+      "body": [
+        "Remotion · edge-tts",
+        "Noto Sans KR · IBM Plex Sans KR",
+        "나눔손글씨 펜 · DM Mono"
+      ]
+    },
+    {
+      "head": "게임 데이터",
+      "body": [
+        "Atelier 허브 · {fetchedDate} 기준"
+      ]
+    }
+  ]
+}
