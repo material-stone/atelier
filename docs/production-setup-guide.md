@@ -6,11 +6,12 @@
 
 - 저장소: <https://github.com/material-stone-games/atelier>
 - GitHub Pages: <https://material-stone-games.github.io/atelier/>
-- 홈: `/atelier/`
-- 허브: `/atelier/hub/`
+- 홈(게임 검색): `/atelier/`
+- 게임 플레이: `/atelier/game/:gameId`
 - 커뮤니티: `/atelier/community`
-- 게임 페이지: `/atelier/hub/game/:gameId`
-- 관리자: `/atelier/hub/admin`
+- Atelier 소개: `/atelier/about`
+- 관리자(업로드 룸): `/atelier/admin`
+- 예전 주소 `/atelier/hub/...`는 새 주소로 넘어갑니다.
 - Firebase Functions 리전: `asia-northeast3`
 
 현재 저장소에는 프런트엔드, Firebase Rules, Cloud Functions, GitHub Actions workflow가 준비되어 있습니다. 실제 운영을 시작하려면 Firebase 프로젝트와 결제 계정, Google/YouTube 설정, 관리자 claim, GitHub Actions 변수와 실제 콘텐츠를 운영자가 입력해야 합니다. 이 값들은 저장소에 임의의 예시값으로 넣지 않습니다.
@@ -306,7 +307,7 @@ npm --prefix functions run set-admin -- admin@example.com
 1. 브라우저에서 Google 로그아웃
 2. 브라우저를 새로고침
 3. 같은 관리자 계정으로 다시 로그인
-4. `/atelier/hub/admin` 접근
+4. `/atelier/admin` 접근
 5. 일반 사용자 계정으로 관리자 페이지가 거부되는지 확인
 
 Custom claim은 기존 ID token에 즉시 반영되지 않을 수 있습니다. 로그아웃/재로그인으로 token을 갱신합니다. 관리자 계정을 추가할 때마다 이 절차를 반복하고, 관리자 목록은 비밀번호 관리자나 운영 문서에서 별도로 관리합니다.
@@ -411,9 +412,10 @@ npm run preview
 브라우저에서 다음 주소를 각각 직접 입력하고 새로고침합니다.
 
 - `http://127.0.0.1:4173/atelier/`
-- `http://127.0.0.1:4173/atelier/hub/`
+- `http://127.0.0.1:4173/atelier/game/<게임 ID>`
 - `http://127.0.0.1:4173/atelier/community`
-- `http://127.0.0.1:4173/atelier/hub/admin`
+- `http://127.0.0.1:4173/atelier/about`
+- `http://127.0.0.1:4173/atelier/admin`
 
 ## 8. 실제 Pages 배포
 
@@ -463,12 +465,12 @@ git push origin main
 
 ### 9.1 페이지·라우팅
 
-- [ ] `/atelier/`를 직접 열었을 때 Material Stone 소개와 Home/Hub 네비게이션이 표시된다.
-- [ ] 상단 YouTube 링크가 실제 채널로 이동한다.
-- [ ] 상단 Discord 링크가 실제 커뮤니티 초대 링크로 이동한다.
-- [ ] `/atelier/hub/`를 직접 열고 새로고침해도 404가 아니다.
+- [ ] `/atelier/`를 직접 열었을 때 왼쪽 사이드바(모바일은 메뉴 서랍)와 게임 검색 화면이 표시된다.
+- [ ] 사이드바의 YouTube 링크가 실제 채널로 이동한다.
+- [ ] 소개 화면의 Discord 버튼이 초대 링크로 이동한다(링크가 없으면 "준비 중"으로 비활성화된다).
+- [ ] `/atelier/game/<게임 ID>`를 직접 열고 새로고침해도 404가 아니다.
 - [ ] `/atelier/community`를 직접 열고 새로고침해도 404가 아니다.
-- [ ] `/atelier/hub/admin`을 직접 열어 비관리자 접근이 차단된다.
+- [ ] `/atelier/admin`을 직접 열어 비관리자 접근이 차단된다.
 - [ ] 모바일 폭에서 카드, 게시판, 업로드 폼, 게임 플레이어가 화면 밖으로 넘치지 않는다.
 
 ### 9.2 Google 로그인과 접근 등급
@@ -491,7 +493,7 @@ git push origin main
 - [ ] 구독하지 않은 계정은 검증 실패하며 프로토타입이 열리지 않는다.
 - [ ] 구독 확인값이 24시간 캐시되는지 확인한다.
 - [ ] 24시간이 지나거나 users 문서의 `youtubeVerifiedUntil`이 만료되면 다시 검증해야 한다.
-- [ ] 관리자 claim이 없는 계정은 `/hub/admin`에서 upload UI를 보지 못한다.
+- [ ] 관리자 claim이 없는 계정은 `/admin`에서 upload UI를 보지 못한다.
 - [ ] 관리자 claim을 부여한 뒤 로그아웃/재로그인하면 업로드 UI가 보인다.
 
 ### 9.3 플레이 세션과 비공개 빌드

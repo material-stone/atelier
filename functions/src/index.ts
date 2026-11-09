@@ -248,12 +248,20 @@ export const createPost = onCall({ region: "asia-northeast3", enforceAppCheck: t
   const text = typeof request.data?.text === "string" ? request.data.text.trim() : "";
   const hasImage = request.data?.hasImage === true;
   if (!text || text.length > 100) throw new HttpsError("invalid-argument", "게시글은 100자 이하로 작성해 주세요.");
+  // A post may point at one game; only a game the author can see, so a link never reveals a private title.
+  const gameId = typeof request.data?.gameId === "string" && request.data.gameId ? request.data.gameId : null;
+  if (gameId) {
+    if (gameId.length > 128 || gameId.includes("/")) throw new HttpsError("invalid-argument", "연결할 게임을 찾을 수 없습니다.");
+    const game = await db.doc(`games/${gameId}`).get();
+    if (!game.exists || !(await canSeeGame(game, auth))) throw new HttpsError("invalid-argument", "연결할 게임을 찾을 수 없습니다.");
+  }
   await enforceRateLimit(auth, "post");
   const postRef = db.collection("posts").doc();
   const postId = postRef.id;
   await postRef.set({
     text,
     imagePath: hasImage ? `board-images/${postId}/image` : null,
+    gameId,
     authorId: auth.uid,
     authorName: publicAuthorName(auth),
     likeCount: 0,

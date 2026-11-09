@@ -6,35 +6,40 @@
  */
 :root {
   /* ---- Primitives: colour ---- */
-  /* Stone: the dark neutrals of the workshop. */
+  /* Paper and ink: the light neutrals of the app frame. */
+  --paper-0: #ffffff;
+  --paper-50: #f9f9f9;
+  --paper-100: #f4f4f4;
+  --paper-200: #ececec;
+  --paper-300: #e5e5e5;
+  --paper-400: #d0d0d0;
+  --ink-500: #5d5d5d;
+  --ink-600: #6b6b6b;
+  --ink-700: #333333;
+  --ink-950: #0d0d0d;
+
+  /* Stone: the dark neutrals behind a game screen. */
   --stone-950: #080a0c;
   --stone-900: #101418;
   --stone-850: #171c21;
-  --stone-800: #1b2023;
-  --stone-750: #20272d;
-  --stone-500: #7a858c;
-  --stone-400: #9aa2a8;
-  --stone-300: #bfc4c3;
-  --cream-100: #e8e7df;
 
-  /* Gem: the blue of the logo gem. 500 is the gem body, 400 its lit facet. */
-  --gem-200: #a9c0ff;
-  --gem-300: #8fb0ff;
+  /* Gem: the blue of the logo gem. 500 is the gem body, 400 its lit facet, 700 its shadow side. */
+  --gem-50: #e6edff;
   --gem-400: #5f8bff;
   --gem-500: #2350e0;
   --gem-700: #1a3db0;
+  --gem-800: #142f8a;
 
-  /* Ember: the laser's heat. A secondary accent, used sparingly. */
-  --ember-400: #ff7144;
-
-  --moss-400: #a6cd7c;
-  --violet-300: #b79bff;
-  --red-400: #ff5a5a;
+  /* Status and tier hues, dark enough to read as text on paper. */
+  --ember-700: #c2410c;
+  --moss-700: #2f6b1e;
+  --violet-700: #6941c6;
+  --red-700: #c62828;
 
   /* ---- Primitives: type ---- */
-  --font-sans: "DM Sans", "Noto Sans KR", sans-serif;
-  --font-display: "Space Grotesk", "Noto Sans KR", sans-serif;
-  --font-mono: "DM Mono", "Noto Sans KR", monospace;
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Noto Sans KR", monospace;
 
   /* Nothing on the site goes below 12px. */
   --fs-caption: 12px;
@@ -43,37 +48,50 @@
   --fs-body: 15px;
   --fs-lead: 16px;
 
+  /* ---- Primitives: shape ---- */
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
   /* ---- Semantic: surfaces and text ---- */
-  --color-bg: var(--stone-900);
-  --color-bg-deep: var(--stone-950);
-  --color-surface: var(--stone-850);
-  --color-surface-raised: var(--stone-750);
-  --color-overlay: var(--stone-800);
-  --color-line: color-mix(in srgb, var(--cream-100) 13%, transparent);
-  --color-line-strong: color-mix(in srgb, var(--cream-100) 40%, transparent);
-  --color-text: var(--cream-100);
-  --color-text-soft: var(--stone-300);
-  --color-text-muted: var(--stone-400);
-  --color-text-placeholder: var(--stone-500);
+  --color-bg: var(--paper-0);
+  --color-sidebar: var(--paper-50);
+  --color-surface: var(--paper-100);         /* cards, panels, fields */
+  --color-surface-raised: var(--paper-200);  /* the active row, other people's bubbles */
+  --color-screen: var(--stone-900);          /* behind a game build */
+  --color-scrim: color-mix(in srgb, var(--ink-950) 40%, transparent);
+  --color-line: var(--paper-300);
+  --color-line-strong: var(--paper-400);
+  --color-text: var(--ink-950);
+  --color-text-soft: var(--ink-700);
+  --color-text-muted: var(--ink-500);        /* 6.6:1 on paper-0, 6.0:1 on paper-100 */
+  --color-text-placeholder: var(--ink-600);  /* 5.3:1 on paper-0, 4.9:1 on paper-100 */
+  --color-on-screen: #ffffff;
 
   /* ---- Semantic: brand accent (gem blue) ---- */
-  --accent: var(--gem-400);                 /* text, icons, underlines: 5.8:1 on bg */
-  --accent-strong: var(--gem-300);          /* hover state of accent text */
-  --accent-fill: var(--gem-500);            /* solid surfaces such as a hovered primary button */
-  --on-accent: #ffffff;                     /* text on accent-fill: 6.4:1 */
-  --accent-line: color-mix(in srgb, var(--gem-400) 50%, transparent);
-  --accent-soft: color-mix(in srgb, var(--gem-400) 13%, transparent);
+  --accent: var(--gem-700);                  /* text, icons, active labels: 8.4:1 on paper-0 */
+  --accent-strong: var(--gem-800);           /* hover state of accent text */
+  --accent-fill: var(--gem-500);             /* buttons, my bubble, selected chips */
+  --accent-fill-hover: var(--gem-700);
+  --on-accent: #ffffff;                      /* text on accent-fill: 6.3:1 */
+  --accent-soft: var(--gem-50);              /* tinted background of the active row */
+  --accent-line: color-mix(in srgb, var(--gem-500) 50%, transparent);
 
   /* ---- Semantic: secondary and status ---- */
-  --heat: var(--ember-400);                 /* likes, warnings, the laser */
-  --heat-soft: color-mix(in srgb, var(--ember-400) 10%, transparent);
-  --success: var(--moss-400);
-  --danger: var(--red-400);
+  --heat: var(--ember-700);                  /* likes and warnings */
+  --heat-soft: color-mix(in srgb, var(--ember-700) 10%, transparent);
+  --success: var(--moss-700);
+  --danger: var(--red-700);
 
   /* ---- Semantic: access tiers ---- */
-  --tier-public: var(--moss-400);
-  --tier-login: var(--cream-100);
-  --tier-subscriber: var(--gem-400);
-  --tier-member: var(--violet-300);
-  --tier-private: var(--ember-400);
+  --tier-public: var(--moss-700);
+  --tier-login: var(--ink-500);
+  --tier-subscriber: var(--gem-700);
+  --tier-member: var(--violet-700);
+  --tier-private: var(--ember-700);
+
+  /* ---- Semantic: layout ---- */
+  --sidebar-width: 260px;
+  --topbar-height: 0px;                      /* the phone top bar sets this to 56px */
 }

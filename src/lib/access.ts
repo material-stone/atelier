@@ -66,6 +66,15 @@ export function accessPermission(game: Pick<Game, "id" | "accessLevel">, auth: A
   return { allowed: false, reason: "subscriber" };
 }
 
+/** Short Korean badge for lists and tags; accessLabel keeps the long form for the admin room. */
+export function accessShortLabel(level: AccessLevel): string {
+  if (level === "public") return "공개";
+  if (level === "login") return "로그인";
+  if (level === "subscriber") return "구독자";
+  if (level === "private") return "초대";
+  return "멤버";
+}
+
 export function accessLabel(level: AccessLevel): string {
   if (level === "public") return "PUBLIC";
   if (level === "login") return "DEMO / LOGIN";

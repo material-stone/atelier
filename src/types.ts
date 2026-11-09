@@ -42,6 +42,8 @@ export interface Post {
   text: string;
   imagePath?: string | null;
   imageUrl?: string | null;
+  /** The one game this post links to, if any. */
+  gameId?: string | null;
   authorId: string;
   authorName: string;
   likeCount: number;
