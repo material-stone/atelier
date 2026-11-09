@@ -70,6 +70,24 @@ Atelier의 색, 글자, 화면 구성 규칙입니다. 값은 모두 [`src/token
 
 보석 파랑은 용도를 나눠 씁니다. **글자에는 `--accent`(gem-700), 칠한 면에는 `--accent-fill`(gem-500)** 을 쓰고, `--accent-fill` 위의 글자는 항상 `--on-accent`입니다.
 
+### 다크 모드
+
+사이드바 아래 **시스템 / 라이트 / 다크** 스위치로 고릅니다. 기본은 시스템이고, OS 설정을 따릅니다.
+
+- 라이트나 다크를 고르면 `<html data-theme="light|dark">`가 붙고 `localStorage`의 `atelier:theme`에 저장됩니다. 시스템으로 돌아가면 둘 다 지웁니다. 로직은 [`src/lib/theme.ts`](../src/lib/theme.ts)에 있습니다.
+- `index.html`의 짧은 스크립트가 첫 화면을 그리기 전에 저장된 값을 적용하므로, 새로고침해도 반대 테마가 번쩍이지 않습니다. 브라우저 위쪽 바 색(`theme-color`)도 함께 바꿉니다.
+- `tokens.css`에서는 **용도 토큰만** 다크 값으로 바뀝니다. 같은 목록이 `:root[data-theme="dark"]`와 `@media (prefers-color-scheme: dark)` 안에 두 번 있으니, 하나를 고치면 다른 하나도 똑같이 고칩니다.
+- 다크 팔레트는 Night(`--night-950` ~ `--night-600`, `#181818` ~ `#4a4a4a`)와 Mist(`--mist-100` ~ `--mist-500`)입니다. 강조 글자는 `--gem-300`, 칠한 면은 라이트와 같은 `--gem-500`입니다.
+
+| 다크 조합 | 대비 |
+|---|---|
+| `--accent`(gem-300) 글자 on night-900 | 7.4:1 |
+| `--color-text-muted`(mist-400) 글자 | 8.1:1 (night-900), 6.5:1 (night-800) |
+| `--color-text-placeholder`(mist-500) 글자 | 5.9:1 (night-900), 4.7:1 (night-800) |
+| `--on-accent` 글자 on `--accent-fill` | 6.3:1 |
+
+새 컴포넌트에 색을 직접 쓰면 다크 모드에서 깨집니다. 꼭 용도 토큰을 쓰고, 맞는 것이 없으면 라이트와 다크 값을 모두 정한 용도 토큰을 추가합니다.
+
 ### 말풍선
 
 - 다른 사람의 한마디: 왼쪽, `--color-surface-raised` 회색.
