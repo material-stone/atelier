@@ -82,6 +82,7 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>(() => loadRecent());
   const [theme, setTheme] = useState<ThemePreference>(() => loadTheme());
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -111,6 +112,16 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
     window.setTimeout(() => setNotice(null), 5000);
   }, []);
 
+  const clearRecent = useCallback(() => {
+    setRecent([]);
+    saveRecent([]);
+  }, []);
+
+  const openSettings = useCallback(() => {
+    setDrawerOpen(false);
+    setSettingsOpen(true);
+  }, []);
+
   const markPlayed = useCallback((gameId: string) => {
     setRecent((list) => {
       if (list[0] === gameId) return list;
@@ -124,7 +135,8 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
     <div className="app-shell">
       <TopBar auth={auth} drawerOpen={drawerOpen} onMenu={() => setDrawerOpen(true)} onNotify={notify} />
       <div className={`sidebar-scrim${drawerOpen ? " is-open" : ""}`} onClick={() => setDrawerOpen(false)} aria-hidden="true" />
-      <Sidebar auth={auth} games={games} recent={recent} theme={theme} onTheme={setTheme} open={drawerOpen} onClose={() => setDrawerOpen(false)} onNotify={notify} />
+      <Sidebar auth={auth} games={games} recent={recent} open={drawerOpen} onClose={() => setDrawerOpen(false)} onSettings={openSettings} onNotify={notify} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} auth={auth} theme={theme} onTheme={setTheme} recentCount={recent.length} onClearRecent={clearRecent} onNotify={notify} />
       <main className="app-main">
         <Routes>
           <Route path="/" element={<HomePage games={games} />} />
@@ -167,6 +179,24 @@ function useAuthAction(auth: AuthState, onNotify: Notify) {
   };
 }
 
+/** Asks the server to check the YouTube subscription; shared by the game lock and the settings window. */
+function useSubscriptionCheck(auth: AuthState, onNotify: Notify) {
+  const [verifying, setVerifying] = useState(false);
+  async function verify() {
+    if (!auth.user) return onNotify("먼저 Google 로그인을 해주세요.");
+    setVerifying(true);
+    try {
+      await verifyYoutubeSubscription();
+      onNotify("구독 확인이 완료되었습니다. 이제 프로토타입을 플레이할 수 있습니다.");
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "구독 확인에 실패했습니다.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+  return { verifying, verify };
+}
+
 function initialOf(name: string): string {
   return (name.trim().slice(0, 1) || "?").toUpperCase();
 }
@@ -200,8 +230,124 @@ function ThemeSwitch({ theme, onTheme }: { theme: ThemePreference; onTheme: (the
   );
 }
 
-function Sidebar({ auth, games, recent, theme, onTheme, open, onClose, onNotify }: { auth: AuthState; games: Game[]; recent: string[]; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; open: boolean; onClose: () => void; onNotify: Notify }) {
+type SettingsTab = "general" | "account";
+
+/**
+ * Settings in a modal <dialog>: General (theme, recent plays) and Account (subscription, membership, sign out).
+ * On desktop the tabs switch panels; on phones the dialog fills the screen and both panels stack.
+ */
+function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onClearRecent, onNotify }: { open: boolean; onClose: () => void; auth: AuthState; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; recentCount: number; onClearRecent: () => void; onNotify: Notify }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [tab, setTab] = useState<SettingsTab>("general");
   const handleAuth = useAuthAction(auth, onNotify);
+  const { verifying, verify } = useSubscriptionCheck(auth, onNotify);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  const name = auth.user ? getDisplayName(auth.user) : null;
+  const panelClass = (id: SettingsTab) => `settings-panel${tab === id ? " is-active" : ""}`;
+
+  return (
+    // The native dialog traps focus and closes on Esc; a click on the backdrop lands on the dialog itself.
+    <dialog ref={dialogRef} className="settings-dialog" aria-labelledby="settings-title" onClose={onClose} onClick={(event) => { if (event.target === event.currentTarget) dialogRef.current?.close(); }}>
+      <header className="settings-head">
+        <h2 id="settings-title">설정</h2>
+        <button className="icon-button" type="button" onClick={() => dialogRef.current?.close()} aria-label="설정 닫기"><CloseIcon /></button>
+      </header>
+      <div className="settings-body">
+        <div className="settings-tabs" role="group" aria-label="설정 항목">
+          <button type="button" aria-pressed={tab === "general"} onClick={() => setTab("general")}><GearIcon />일반</button>
+          <button type="button" aria-pressed={tab === "account"} onClick={() => setTab("account")}><PersonIcon />계정</button>
+        </div>
+        <div className="settings-panels">
+          <section className={panelClass("general")} aria-labelledby="settings-general">
+            <h3 id="settings-general" className="settings-section-title">일반</h3>
+            <div className="setting-row">
+              <div className="setting-copy"><strong>화면 모드</strong><p>시스템을 고르면 기기 설정을 따라가요.</p></div>
+              <ThemeSwitch theme={theme} onTheme={onTheme} />
+            </div>
+            <div className="setting-row">
+              <div className="setting-copy"><strong>최근 플레이 기록</strong><p>사이드바의 최근 플레이 목록을 지워요. 이 브라우저에만 저장돼 있어요.</p></div>
+              <button className="button button-quiet small" type="button" onClick={() => { onClearRecent(); onNotify("최근 플레이 기록을 지웠어요."); }} disabled={!recentCount}>{recentCount ? "지우기" : "비어 있어요"}</button>
+            </div>
+          </section>
+          <section className={panelClass("account")} aria-labelledby="settings-account">
+            <h3 id="settings-account" className="settings-section-title">계정</h3>
+            {name ? (
+              <>
+                <div className="setting-row setting-profile">
+                  <span className="avatar avatar-large" aria-hidden="true">{initialOf(name)}</span>
+                  <div className="setting-copy"><strong>{name}</strong><p>Google 계정으로 로그인됨 · 댓글과 글에 이 이름이 보여요</p></div>
+                </div>
+                <div className="setting-row">
+                  <div className="setting-copy"><strong>YouTube 구독 <span className={`status-badge${auth.isSubscriber ? " is-on" : ""}`}>{auth.isSubscriber ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isSubscriber ? "구독자 프로토타입을 플레이할 수 있어요." : "채널을 구독한 뒤 확인하면 구독자 프로토타입이 열려요."}</p></div>
+                  <button className="button button-quiet small" type="button" onClick={verify} disabled={verifying}>{verifying ? "확인 중…" : auth.isSubscriber ? "다시 확인" : "구독 확인"}</button>
+                </div>
+                <div className="setting-row">
+                  <div className="setting-copy"><strong>채널 멤버십 <span className={`status-badge${auth.isMember ? " is-on" : ""}`}>{auth.isMember ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isMember ? "얼리 액세스 게임을 플레이할 수 있어요." : "운영자가 멤버십을 확인하면 얼리 액세스 게임이 열려요."}</p></div>
+                  <a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a>
+                </div>
+                <div className="setting-row">
+                  <div className="setting-copy"><strong>로그아웃</strong><p>이 브라우저에서 로그아웃해요.</p></div>
+                  <button className="button button-danger small" type="button" onClick={() => { dialogRef.current?.close(); void handleAuth(); }}>로그아웃</button>
+                </div>
+              </>
+            ) : (
+              <div className="setting-row">
+                <div className="setting-copy"><strong>로그인하지 않았어요</strong><p>Google로 로그인하면 좋아요와 한마디를 남기고, 구독자 게임을 열 수 있어요.</p></div>
+                <button className="button button-primary small" type="button" onClick={() => void handleAuth()} disabled={auth.loading}>Google로 로그인</button>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+/** The account row at the bottom of the sidebar; it opens a small menu upwards with settings and sign in/out. */
+function AccountMenu({ auth, onSettings, onNotify }: { auth: AuthState; onSettings: () => void; onNotify: Notify }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const handleAuth = useAuthAction(auth, onNotify);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onPointer); window.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const name = auth.user ? getDisplayName(auth.user) : null;
+  return (
+    <div className="account" ref={rootRef}>
+      {open ? (
+        <div className="account-menu" role="menu" aria-label="계정 메뉴">
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onSettings(); }}><GearIcon />설정</button>
+          <span className="account-menu-rule" aria-hidden="true" />
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); void handleAuth(); }} disabled={auth.loading}>
+            {auth.user ? <><LogoutIcon />로그아웃</> : <><LoginIcon />Google로 로그인</>}
+          </button>
+        </div>
+      ) : null}
+      <button className={`account-button${open ? " is-open" : ""}`} type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open}>
+        {name
+          ? <><span className="avatar" aria-hidden="true">{initialOf(name)}</span><span className="account-copy"><strong>{name}</strong><small>{auth.isMember ? "채널 멤버" : auth.isSubscriber ? "YouTube 구독 확인됨" : "Google 계정"}</small></span></>
+          : <><span className="avatar avatar-empty" aria-hidden="true"><PersonIcon /></span><span className="account-copy"><strong>Google로 로그인</strong><small>좋아요·댓글을 남기려면</small></span></>}
+        <ChevronUpIcon />
+      </button>
+    </div>
+  );
+}
+
+function Sidebar({ auth, games, recent, open, onClose, onSettings, onNotify }: { auth: AuthState; games: Game[]; recent: string[]; open: boolean; onClose: () => void; onSettings: () => void; onNotify: Notify }) {
   const rotation = useMemo(() => rotationForGames(games), [games]);
   const recentGames = recent.map((id) => games.find((game) => game.id === id)).filter((game): game is Game => Boolean(game));
   const badge = (game: Game) => (rotation.has(game.id) ? "이번 주 무료" : game.accessLevel === "public" ? null : accessShortLabel(game.accessLevel));
@@ -235,12 +381,7 @@ function Sidebar({ auth, games, recent, theme, onTheme, open, onClose, onNotify 
         </div>
       </div>
       <div className="sidebar-foot">
-        <button className="account-button" type="button" onClick={handleAuth} disabled={auth.loading}>
-          {auth.user
-            ? <><span className="avatar" aria-hidden="true">{initialOf(getDisplayName(auth.user))}</span><span className="account-copy"><strong>{getDisplayName(auth.user)}</strong><small>눌러서 로그아웃</small></span></>
-            : <><span className="avatar avatar-empty" aria-hidden="true"><PersonIcon /></span><span className="account-copy"><strong>Google로 로그인</strong><small>좋아요·댓글을 남기려면</small></span></>}
-        </button>
-        <ThemeSwitch theme={theme} onTheme={onTheme} />
+        <AccountMenu auth={auth} onSettings={onSettings} onNotify={onNotify} />
         <div className="sidebar-links">
           <a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">YouTube ↗</a>
           <Link to="/privacy">개인정보처리방침</Link>
@@ -327,7 +468,7 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(game?.likeCount ?? 0);
   const [viewCount, setViewCount] = useState<number | null>(null);
-  const [verifying, setVerifying] = useState(false);
+  const { verifying, verify: verifySubscriber } = useSubscriptionCheck(auth, onNotify);
   const playerRef = useRef<HTMLDivElement>(null);
 
   // The live list may not hold this game yet (or ever, for a direct link), so ask for it once.
@@ -399,19 +540,6 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
       setPlayStatus("idle");
     } catch (error) {
       setPlayStatus(error instanceof Error ? error.message : "게임을 열지 못했습니다.");
-    }
-  }
-
-  async function verifySubscriber() {
-    if (!auth.user) return onNotify("먼저 Google 로그인을 해주세요.");
-    setVerifying(true);
-    try {
-      await verifyYoutubeSubscription();
-      onNotify("구독 확인이 완료되었습니다. 이제 프로토타입을 플레이할 수 있습니다.");
-    } catch (error) {
-      onNotify(error instanceof Error ? error.message : "구독 확인에 실패했습니다.");
-    } finally {
-      setVerifying(false);
     }
   }
 
@@ -996,6 +1124,10 @@ function ImageIcon() { return <Icon><rect x="2.5" y="3.5" width="13" height="11"
 function GamepadIcon() { return <Icon><rect x="2" y="5" width="14" height="8.5" rx="4.25" /><path d="M6 7.5v3.5M4.25 9.25h3.5" /><path d="M12 8.3v.1M13.3 10.3v.1" /></Icon>; }
 function CheckIcon() { return <Icon size={16}><path d="M3.5 9.5l3.5 3.5 7.5-8" /></Icon>; }
 function FullscreenIcon() { return <Icon size={16}><path d="M2.5 6.5v-4h4M11.5 2.5h4v4M15.5 11.5v4h-4M6.5 15.5h-4v-4" /></Icon>; }
+function GearIcon() { return <Icon size={17}><circle cx="9" cy="9" r="2.4" /><path d="M9 1.8v2M9 14.2v2M1.8 9h2M14.2 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4" /></Icon>; }
+function LogoutIcon() { return <Icon size={17}><path d="M7 15H3.5V3H7M11.5 12.5L15 9l-3.5-3.5M15 9H7" /></Icon>; }
+function LoginIcon() { return <Icon size={17}><path d="M11 3h3.5v12H11M6.5 5.5L10 9l-3.5 3.5M10 9H2.5" /></Icon>; }
+function ChevronUpIcon() { return <Icon size={14}><path d="M4.5 11L9 6.5l4.5 4.5" /></Icon>; }
 function MonitorIcon() { return <Icon size={15}><rect x="2.5" y="3" width="13" height="9" rx="1.5" /><path d="M6.5 15h5M9 12v3" /></Icon>; }
 function SunIcon() { return <Icon size={15}><circle cx="9" cy="9" r="3" /><path d="M9 2v1.5M9 14.5V16M2 9h1.5M14.5 9H16M4 4l1 1M13 13l1 1M4 14l1-1M13 5l1-1" /></Icon>; }
 function MoonIcon() { return <Icon size={15}><path d="M14.5 11A6 6 0 0 1 7 3.5a6 6 0 1 0 7.5 7.5z" /></Icon>; }
