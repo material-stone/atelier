@@ -2,6 +2,34 @@
 
 Claude가 구현하면서 정한 설계와 그 이유입니다. 사용자가 정한 방향은 [user-decisions.md](user-decisions.md)에 있습니다.
 
+## 2026-11-10 · 게임 세이브 브리지
+
+### 저장소는 IndexedDB, 키는 `[gameId, key]`
+
+- **결정:** `src/lib/saveStore.ts`의 `SaveStore` 인터페이스(load/set/remove) 뒤에 IndexedDB 구현(`atelier-saves` DB, keyPath `["gameId","key"]`)을 둔다. IndexedDB가 없을 때만 localStorage(`atelier:save:{gameId}:{key}`)로 돌아간다.
+- **이유:** 복합 키라 게임별로 범위 읽기 한 번에 불러오고, `atelier:theme` 같은 허브 키와 섞일 일이 없다. 수백 KB 세이브도 메인 스레드를 막지 않는다. Firestore 동기화는 같은 인터페이스의 다른 구현으로 붙이면 된다.
+
+### 브리지는 메모리 사본을 두고 메시지를 순서대로 처리
+
+- **결정:** `createSaveBridge(gameId, reply, store)`가 게임의 키-값을 메모리에 들고, `storage-set`을 받으면 사본을 바로 고친 뒤 저장소에 쓴다. 모든 메시지는 한 줄로 처리한다.
+- **이유:** 게임이 저장하자마자 reload해서 `storage-hello`를 다시 보내도 새 값이 나간다. hello 직후 보낸 set이 불러오기보다 먼저 처리되는 일도 없다. 저장에 실패하면 사본을 되돌려 기기에 없는 값을 게임에 돌려주지 않는다.
+- **용량 계산:** (키 길이 + 값 길이) × 2바이트, 게임당 5MB. 브라우저가 문자열을 UTF-16으로 세는 방식에 맞췄고, 같은 키를 덮어쓰면 이전 값은 빼고 센다.
+
+### 리스너는 `useLayoutEffect`, 답장은 빌드 출처로만
+
+- **결정:** `GameScreen`에서 `useSaveBridge`가 `useLayoutEffect`로 리스너를 붙이고, 브리지는 `gameId`마다 하나라 iframe이 다시 열려도 그대로 쓴다. `event.source`가 게임 iframe이고 `event.origin`이 플레이 URL의 출처일 때만 받고, 답장도 그 출처를 `targetOrigin`으로 보낸다.
+- **이유:** 레이아웃 이펙트는 그리기 전에 실행되므로 iframe 문서가 먼저 메시지를 보낼 수 없다. 기존 전체화면 메시지는 불리언만 보내 `"*"`를 쓰지만, 세이브는 내용이 있으므로 iframe이 다른 출처로 이동했다면 보내지 않는다. 기존 전체화면 리스너는 건드리지 않았다.
+
+### 게임 쪽 예시는 `createAtelierStorage()` 하나로
+
+- **결정:** 문서와 테스트 빌드(`test-builds/save-bridge-test`)가 같은 클라이언트 코드를 쓴다. 1.5초 안에 ready가 없으면 localStorage로 돌아가고, `migrateKeys`에 적은 키만 한 번 옮긴 뒤 `atelier:migrated` 표시를 남긴다.
+- **이유:** 지금까지 모든 게임이 같은 iframe 출처를 썼으므로 localStorage 전체를 옮기면 다른 게임의 세이브까지 가져온다. 옛 값을 지우지 않는 것은 옮기다 실패해도 원본이 남게 하기 위해서다.
+
+### 확인 방법
+
+- 단위 테스트(`saveBridge.test.ts`): 세션 사이 유지, reload 직후 최신 값, 같은 키 두 게임 분리, 메시지 속 gameId 무시, 허브 키와 분리, 한도·잘못된 값, 저장 실패 시 되돌림.
+- 데모 모드 브라우저 확인: 테스트 빌드를 가리키는 임시 데모 항목 둘로 저장 → 게임 내 reload → 페이지 새로 열기 순서로 값이 남는 것, 같은 키를 쓴 두 게임이 분리되는 것, 허브 창과 다른 iframe에서 보낸 `storage-set`이 무시되는 것, 옛 localStorage 값 이전, 전체화면 메시지 동작을 확인했다. 임시 데모 항목은 되돌렸다. 실제 업로드 빌드(다른 출처 iframe)와 iPhone 홈 화면 앱에서는 아직 확인하지 않았다.
+
 ## 2026-11-10 · atelier.materialstone.dev 도메인 연결
 
 ### 경로(materialstone.dev/atelier) 대신 서브도메인(atelier.materialstone.dev)
@@ -37,7 +65,8 @@ Claude가 구현하면서 정한 설계와 그 이유입니다. 사용자가 정
 ### tools/atelier-cli의 줄바꿈을 .gitattributes로 LF 고정
 
 - **결정:** `tools/atelier-cli/** text eol=lf`. 저장소 전체가 아니라 이 폴더만 정한다.
-- **이유:** Windows 체크아웃(`core.autocrlf=true`)에서는 `cli.mjs`가 CRLF가 되어, 그대로 npm에 올리면 macOS·Linux에서 `#!/usr/bin/env node`를 찾지 못해 실행되지 않는다. 첫 게시 때는 손으로 LF로 바꿔 올렸다. 저장소 전체 규칙은 다른 파일의 줄바꿈까지 바꿔 큰 diff가 생기므로, 문제가 실제로 생기는 곳만 고정했다.
+- **이유:** Windows 체크아웃(`core.autocrlf=true`)에서는 `cli.mjs`가 CRLF가 되어, 그대로 npm에 올리면 macOS·Linux에서 `#!/usr/bin/env node
+`를 찾지 못해 실행되지 않는다. 첫 게시 때는 손으로 LF로 바꿔 올렸다. 저장소 전체 규칙은 다른 파일의 줄바꿈까지 바꿔 큰 diff가 생기므로, 문제가 실제로 생기는 곳만 고정했다.
 
 ### functions/.env.example에 SITE_URL을 넣는다
 
