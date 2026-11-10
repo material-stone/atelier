@@ -22,11 +22,11 @@ const db = getFirestore();
 const GAME_STORAGE_BUCKET = defineString("GAME_STORAGE_BUCKET");
 const bucket = getStorage().bucket(process.env.GAME_STORAGE_BUCKET);
 const YOUTUBE_CHANNEL_ID = defineString("YOUTUBE_CHANNEL_ID", { default: "" });
-const PAGES_ORIGIN = defineString("PAGES_ORIGIN", { default: "https://material-stone.github.io" });
+const PAGES_ORIGIN = defineString("PAGES_ORIGIN", { default: "https://atelier.materialstone.dev" });
 const FUNCTIONS_BASE_URL = defineString("FUNCTIONS_BASE_URL", { default: "" });
 const PLAY_SESSION_SECRET = defineSecret("PLAY_SESSION_SECRET");
 // The site's own address (with its base path), for links the CLI login opens.
-const SITE_URL = defineString("SITE_URL", { default: "https://material-stone.github.io/atelier" });
+const SITE_URL = defineString("SITE_URL", { default: "https://atelier.materialstone.dev" });
 
 const MAX_ZIP_BYTES = 250 * 1024 * 1024;
 const MAX_EXTRACTED_BYTES = 1024 * 1024 * 1024;

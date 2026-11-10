@@ -2,6 +2,19 @@
 
 Claude가 구현하면서 정한 설계와 그 이유입니다. 사용자가 정한 방향은 [user-decisions.md](user-decisions.md)에 있습니다.
 
+## 2026-11-10 · atelier.materialstone.dev 도메인 연결
+
+### 경로(materialstone.dev/atelier) 대신 서브도메인(atelier.materialstone.dev)
+
+- **이유:** 경로 방식이면 `materialstone.dev` 아래 모든 페이지가 한 origin이라 아틀리에의 Firebase 로그인 저장소와 localStorage를 함께 쓴다. 다른 페이지에 문제가 생기면 아틀리에 계정까지 영향을 받는다. 서브도메인은 origin이 분리되고, 나중에 아틀리에만 다른 호스팅으로 옮겨도 주소가 유지된다. 로그인이 없는 정적 페이지(개인정보처리방침 등)는 경로 방식도 괜찮다.
+- **비용:** Vite base와 라우터 basename을 `/atelier/`에서 `/`로, manifest의 `id`·`start_url`·`scope`도 `/`로 바꿨다.
+
+### 도메인 연결이 끝난 뒤에 이 변경을 병합한다
+
+- **이유:** base가 `/`인 빌드를 `material-stone.github.io/atelier/`에서 열면 asset 경로가 깨진다. 그래서 DNS와 Pages custom domain이 먼저 동작한 뒤 병합한다. Firebase 승인 도메인·reCAPTCHA 허용 도메인·`PAGES_ORIGIN`·`SITE_URL`도 이때 함께 바꾼다.
+- **옛 주소:** `material-stone-games/atelier`의 넘겨주는 페이지가 새 도메인으로 바로 보내도록 바꾼다. github.io를 거쳐 두 번 넘어가지 않게 하기 위해.
+- **Cloudflare 프록시는 끈다:** 프록시를 켜면 GitHub Pages가 HTTPS 인증서를 발급하지 못한다.
+
 ## 2026-11-10 · atelier 저장소를 material-stone 조직으로 이전
 
 ### 주소를 새 조직 기준으로 바꾸고 옛 주소는 넘겨주는 페이지로 유지
