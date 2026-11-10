@@ -1,6 +1,6 @@
 {
   "name": "@material-stone/atelier-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Log in to Atelier and upload web game builds from the terminal",
   "type": "module",
   "bin": {
@@ -21,10 +21,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/material-stone-games/atelier.git",
+    "url": "git+https://github.com/material-stone/atelier.git",
     "directory": "tools/atelier-cli"
   },
-  "homepage": "https://github.com/material-stone-games/atelier/blob/main/docs/upload-api.md",
+  "homepage": "https://github.com/material-stone/atelier/blob/main/docs/upload-api.md",
   "license": "UNLICENSED",
   "publishConfig": {
     "access": "public"

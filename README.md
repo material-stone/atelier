@@ -25,7 +25,7 @@ npm run build
 ## Firebase setup
 
 1. Firebase 프로젝트를 Blaze 요금제로 전환합니다. Cloud Storage와 Cloud Functions가 필요합니다.
-2. Google Authentication을 켜고 `material-stone-games.github.io`를 authorized domain에 추가합니다.
+2. Google Authentication을 켜고 `material-stone.github.io`를 authorized domain에 추가합니다.
 3. Firestore, Storage, Cloud Functions를 초기화한 뒤 Rules와 indexes를 배포합니다.
 4. YouTube Data API를 활성화하고 Functions 환경값을 설정합니다.
 

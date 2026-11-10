@@ -96,7 +96,7 @@ CLI ── POST /cli/sessions/{id}/token (3초마다) ──▶ 승인됐으면 
 - 승인 전에는 키가 존재하지 않고, 승인 후 CLI가 받아 가는 순간 만들어집니다. 그래서 키 원문은 서버 어디에도 저장되지 않습니다.
 - 폴링 토큰은 CLI만 갖고 있어서, 코드를 본 다른 사람이 키를 받아 갈 수 없습니다.
 - 인증 없이 열린 경로라서 만료된 요청은 새 요청이 올 때 지우고, 진행 중인 요청은 최대 20개로 제한합니다.
-- 승인 페이지 주소는 Functions 파라미터 `SITE_URL`(기본값 `https://material-stone-games.github.io/atelier`)로 만듭니다.
+- 승인 페이지 주소는 Functions 파라미터 `SITE_URL`(기본값 `https://material-stone.github.io/atelier`)로 만듭니다.
 
 ## 사용법
 
