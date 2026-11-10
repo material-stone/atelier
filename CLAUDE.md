@@ -11,7 +11,7 @@
 
 ## 게임 업로드
 
-게임 업로드는 브라우저 대신 `atelier-upload` CLI를 쓴다(전역 스킬 `atelier-upload` 참고). 설치 전이면 `node tools/atelier-upload/upload.mjs --help`. 자세한 내용은 `docs/upload-api.md`.
+게임 업로드는 브라우저 대신 `atelier-cli`를 쓴다(전역 스킬 `atelier-upload` 참고). 설치 전이면 `node tools/atelier-cli/cli.mjs help`. 자세한 내용은 `docs/upload-api.md`.
 
-- `tools/atelier-upload/skill/SKILL.md`를 고치면 `~/.claude/skills/atelier-upload/SKILL.md`에도 복사한다.
-- API 키 원문을 읽거나 출력하지 않는다. 확인은 `atelier-upload --config`로 한다.
+- `tools/atelier-cli/skill/SKILL.md`를 고치면 `~/.claude/skills/atelier-upload/SKILL.md`에도 복사한다.
+- 업로드 키 원문을 읽거나 출력하지 않는다. 확인은 `atelier-cli config`, 키가 없으면 `atelier-cli login`(승인은 사용자가 직접).

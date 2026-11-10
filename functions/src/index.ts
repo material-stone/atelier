@@ -11,7 +11,7 @@ import { logger } from "firebase-functions";
 import mime from "mime-types";
 import unzipper from "unzipper";
 import { type AccessLevel, isAccessLevel, normalizeEmailList, weeklyRotationIds } from "./access.js";
-import { apiKeyMatches, bearerToken } from "./apiKey.js";
+import { bearerToken, hashSecret, keyPreview, newApiKey, newPollToken, newUserCode, normalizeUserCode, sameDigest } from "./apiKey.js";
 import { DIRECT_ASSET_CACHE_CONTROL, isDirectAsset, signedUrlWindow } from "./delivery.js";
 import { monthKeyBefore, pageMonthKey } from "./month.js";
 
@@ -25,8 +25,8 @@ const YOUTUBE_CHANNEL_ID = defineString("YOUTUBE_CHANNEL_ID", { default: "" });
 const PAGES_ORIGIN = defineString("PAGES_ORIGIN", { default: "https://material-stone-games.github.io" });
 const FUNCTIONS_BASE_URL = defineString("FUNCTIONS_BASE_URL", { default: "" });
 const PLAY_SESSION_SECRET = defineSecret("PLAY_SESSION_SECRET");
-// Admin key for the upload API (scripts and Claude upload without a browser). Rotate with functions:secrets:set.
-const UPLOAD_API_KEY = defineSecret("UPLOAD_API_KEY");
+// The site's own address (with its base path), for links the CLI login opens.
+const SITE_URL = defineString("SITE_URL", { default: "https://material-stone-games.github.io/atelier" });
 
 const MAX_ZIP_BYTES = 250 * 1024 * 1024;
 const MAX_EXTRACTED_BYTES = 1024 * 1024 * 1024;
@@ -416,19 +416,196 @@ async function apiGameStatus(gameId: string) {
   };
 }
 
+// ---- Upload API keys: issued from the settings window or by approving a CLI login, stored only as hashes. ----
+
+const MAX_KEY_LABEL = 60;
+const CLI_LOGIN_TTL_MS = 10 * 60 * 1000;
+const MAX_PENDING_CLI_LOGINS = 20;
+const KEY_TOUCH_INTERVAL_MS = 10 * 60 * 1000;
+
+// Neither collection has client rules: only Functions can read or write them.
+const apiKeyRef = (hash: string) => db.doc(`apiKeys/${hash}`);
+const cliLoginRef = (id: string) => db.doc(`cliLogins/${id}`);
+
+function readLabel(value: unknown, fallback: string): string {
+  const label = typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, MAX_KEY_LABEL) : "";
+  return label || fallback;
+}
+
+function apiKeyRecord(key: string, label: string, createdBy: string, source: "settings" | "cli") {
+  return { label, preview: keyPreview(key), source, createdBy, createdAt: FieldValue.serverTimestamp(), lastUsedAt: null, revokedAt: null };
+}
+
+/** Finds the active key behind an Authorization header and notes when it was last used. */
+async function authenticateApiKey(header: string | undefined): Promise<string> {
+  const key = bearerToken(header);
+  if (!key) throw new ApiError(401, "API 키가 필요합니다. atelier-cli login으로 로그인해 주세요.");
+  const hash = hashSecret(key);
+  const snapshot = await apiKeyRef(hash).get();
+  if (!snapshot.exists || snapshot.get("revokedAt")) throw new ApiError(401, "API 키가 올바르지 않거나 폐기되었습니다. atelier-cli login으로 다시 로그인해 주세요.");
+  const lastUsed = snapshot.get("lastUsedAt");
+  // Writing on every request would only add cost; a coarse "last used" is all the settings list needs.
+  if (!(lastUsed instanceof Timestamp) || Date.now() - lastUsed.toMillis() > KEY_TOUCH_INTERVAL_MS) {
+    await snapshot.ref.update({ lastUsedAt: FieldValue.serverTimestamp() });
+  }
+  return hash;
+}
+
+export const createApiKey = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 1 }, async (request) => {
+  const auth = requireAdmin(request);
+  const label = readLabel(request.data?.label, "이름 없는 키");
+  const key = newApiKey();
+  await apiKeyRef(hashSecret(key)).create(apiKeyRecord(key, label, auth.uid, "settings"));
+  logger.info("API key issued", { label, by: auth.uid, source: "settings" });
+  // The only time the key itself leaves the server.
+  return { key, label };
+});
+
+export const listApiKeys = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 1 }, async (request) => {
+  requireAdmin(request);
+  const snapshot = await db.collection("apiKeys").orderBy("createdAt", "desc").limit(100).get();
+  const iso = (value: unknown) => (value instanceof Timestamp ? value.toDate().toISOString() : null);
+  return {
+    keys: snapshot.docs.map((doc) => ({
+      id: doc.id,
+      label: String(doc.get("label") ?? ""),
+      preview: String(doc.get("preview") ?? ""),
+      source: String(doc.get("source") ?? ""),
+      createdAt: iso(doc.get("createdAt")),
+      lastUsedAt: iso(doc.get("lastUsedAt")),
+      revokedAt: iso(doc.get("revokedAt")),
+    })),
+  };
+});
+
+export const revokeApiKey = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 1 }, async (request) => {
+  const auth = requireAdmin(request);
+  const id = typeof request.data?.id === "string" && /^[0-9a-f]{64}$/.test(request.data.id) ? request.data.id : "";
+  const ref = apiKeyRef(id);
+  if (!id || !(await ref.get()).exists) throw new HttpsError("not-found", "키를 찾을 수 없습니다.");
+  await ref.update({ revokedAt: FieldValue.serverTimestamp(), revokedBy: auth.uid });
+  logger.info("API key revoked", { id: id.slice(0, 8), by: auth.uid });
+  return { ok: true };
+});
+
+/** Pending CLI login for a code typed on (or linked to) the approval page. */
+async function pendingCliLogin(code: unknown) {
+  const userCode = normalizeUserCode(code);
+  if (!userCode) throw new HttpsError("invalid-argument", "코드 형식이 올바르지 않습니다.");
+  const match = await db.collection("cliLogins").where("userCode", "==", userCode).limit(1).get();
+  const doc = match.docs[0];
+  const expiresAt = doc?.get("expiresAt");
+  if (!doc || doc.get("status") !== "pending" || !(expiresAt instanceof Timestamp) || expiresAt.toMillis() < Date.now()) {
+    throw new HttpsError("not-found", "코드가 없거나 만료되었습니다. 터미널에서 다시 로그인해 주세요.");
+  }
+  return doc;
+}
+
+export const describeCliLogin = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 1 }, async (request) => {
+  requireAdmin(request);
+  const doc = await pendingCliLogin(request.data?.code);
+  return { userCode: doc.get("userCode"), label: doc.get("label"), expiresAt: (doc.get("expiresAt") as Timestamp).toDate().toISOString() };
+});
+
+export const approveCliLogin = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 1 }, async (request) => {
+  const auth = requireAdmin(request);
+  const doc = await pendingCliLogin(request.data?.code);
+  const approve = request.data?.approve === true;
+  // The key itself is minted only when the CLI collects it, so it is never stored in the clear.
+  await doc.ref.update({ status: approve ? "approved" : "denied", decidedBy: auth.uid, decidedAt: FieldValue.serverTimestamp() });
+  logger.info("CLI login decided", { approve, label: doc.get("label"), by: auth.uid });
+  return { ok: true, label: doc.get("label") };
+});
+
+/** Starts a CLI login (device-code style): the terminal shows the code, an admin approves it on the site. */
+async function startCliLogin(body: Record<string, unknown>) {
+  const now = Date.now();
+  // Unauthenticated, so keep it bounded: sweep expired attempts and cap the live ones.
+  const expired = await db.collection("cliLogins").where("expiresAt", "<", Timestamp.fromMillis(now)).limit(50).get();
+  await deleteDocs(expired);
+  const live = await db.collection("cliLogins").where("expiresAt", ">=", Timestamp.fromMillis(now)).count().get();
+  if (live.data().count >= MAX_PENDING_CLI_LOGINS) throw new ApiError(429, "로그인 요청이 너무 많습니다. 몇 분 뒤 다시 시도해 주세요.");
+
+  const pollToken = newPollToken();
+  const userCode = newUserCode();
+  const ref = db.collection("cliLogins").doc();
+  await ref.set({
+    userCode,
+    pollTokenHash: hashSecret(pollToken),
+    label: readLabel(body.label, "CLI"),
+    status: "pending",
+    createdAt: FieldValue.serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(now + CLI_LOGIN_TTL_MS),
+  });
+  return {
+    sessionId: ref.id,
+    pollToken,
+    userCode,
+    verificationUrl: `${SITE_URL.value().replace(/\/+$/, "")}/cli-login?code=${encodeURIComponent(userCode)}`,
+    expiresIn: CLI_LOGIN_TTL_MS / 1000,
+    interval: 3,
+  };
+}
+
+/** The CLI polls this; once approved it receives the new key exactly once. */
+async function collectCliLogin(sessionId: string, body: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
+  const pollToken = typeof body.pollToken === "string" ? body.pollToken : "";
+  const ref = cliLoginRef(sessionId);
+  return db.runTransaction(async (transaction) => {
+    const session = await transaction.get(ref);
+    if (!session.exists || !pollToken || !sameDigest(hashSecret(pollToken), String(session.get("pollTokenHash") ?? ""))) {
+      return { status: 404, body: { error: "로그인 요청을 찾을 수 없습니다." } };
+    }
+    const expired = (session.get("expiresAt") as Timestamp).toMillis() < Date.now();
+    const status = session.get("status");
+    if (status === "denied" || (status === "pending" && expired)) {
+      transaction.delete(ref);
+      return { status: 410, body: { error: status === "denied" ? "로그인이 거절되었습니다." : "로그인 요청이 만료되었습니다. 다시 시도해 주세요." } };
+    }
+    if (status !== "approved") return { status: 202, body: { status: "pending" } };
+    const key = newApiKey();
+    const label = String(session.get("label") ?? "CLI");
+    transaction.create(apiKeyRef(hashSecret(key)), apiKeyRecord(key, label, String(session.get("decidedBy") ?? ""), "cli"));
+    transaction.delete(ref);
+    return { status: 200, body: { key, label } };
+  });
+}
+
 /**
- * POST /games       — create a game or point an existing one at a new build; returns upload URLs.
- * GET  /games/{id}  — build status, for polling until processBuildZip finishes.
- * DELETE /games/{id}/versions/{versionId} — cancel a draft whose ZIP never finished uploading.
- * Auth: `Authorization: Bearer <UPLOAD_API_KEY>`. The key acts as the admin, so keep it off the client.
+ * Upload API. Every route needs `Authorization: Bearer <key>` except the CLI login pair.
+ * POST   /cli/sessions                      — start a CLI login, returns a code to approve on the site.
+ * POST   /cli/sessions/{id}/token           — poll; returns the new key once approved.
+ * DELETE /keys/self                         — revoke the calling key (CLI logout).
+ * POST   /games                             — create a game or point an existing one at a new build; returns upload URLs.
+ * GET    /games/{id}                        — build status, for polling until processBuildZip finishes.
+ * DELETE /games/{id}/versions/{versionId}   — cancel a draft whose ZIP never finished uploading.
+ * A key acts as the admin for uploads, so it must stay off the client.
  */
-export const uploadApi = onRequest({ region: "asia-northeast3", maxInstances: 1, secrets: [UPLOAD_API_KEY] }, async (request, response) => {
+export const uploadApi = onRequest({ region: "asia-northeast3", maxInstances: 1 }, async (request, response) => {
   response.set("Cache-Control", "no-store");
   try {
-    if (!apiKeyMatches(bearerToken(request.get("authorization")), UPLOAD_API_KEY.value())) throw new ApiError(401, "API 키가 올바르지 않습니다.");
     const path = request.path.replace(/\/+$/, "");
+    const body = request.body && typeof request.body === "object" ? (request.body as Record<string, unknown>) : {};
+    if (request.method === "POST" && path === "/cli/sessions") {
+      response.status(201).json(await startCliLogin(body));
+      return;
+    }
+    const tokenMatch = path.match(/^\/cli\/sessions\/([A-Za-z0-9]{1,40})\/token$/);
+    if (request.method === "POST" && tokenMatch?.[1]) {
+      const result = await collectCliLogin(tokenMatch[1], body);
+      if (result.status === 200) logger.info("API key issued", { label: result.body.label, source: "cli" });
+      response.status(result.status).json(result.body);
+      return;
+    }
+
+    const keyId = await authenticateApiKey(request.get("authorization"));
+    if (request.method === "DELETE" && path === "/keys/self") {
+      await apiKeyRef(keyId).update({ revokedAt: FieldValue.serverTimestamp(), revokedBy: "self" });
+      logger.info("API key revoked", { id: keyId.slice(0, 8), by: "self" });
+      response.json({ ok: true });
+      return;
+    }
     if (request.method === "POST" && path === "/games") {
-      const body = request.body && typeof request.body === "object" ? (request.body as Record<string, unknown>) : {};
       const result = await createApiDraft(body);
       logger.info("Upload API draft", { gameId: result.gameId, versionId: result.versionId, created: result.created });
       response.status(result.created ? 201 : 200).json(result);

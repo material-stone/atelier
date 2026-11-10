@@ -116,6 +116,18 @@ p, h1, h2, .bubble, .post-text { word-break: keep-all; overflow-wrap: anywhere; 
 .button-danger:hover { border-color: var(--danger); }
 .settings-dialog .theme-switch { margin: 0; flex: none; }
 .settings-dialog .theme-switch button { min-height: 34px; padding: 0 12px; font-size: var(--fs-small); }
+/* Upload API keys (settings) and the CLI login approval page */
+.inline-code { padding: 1px 6px; border-radius: var(--radius-sm); background: var(--color-surface-raised); color: var(--color-text-soft); font-family: var(--font-mono); font-size: .92em; overflow-wrap: anywhere; }
+.setting-input { width: 100%; min-height: 40px; margin-top: 10px; padding: 0 12px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); outline: 0; background: var(--color-bg); color: var(--color-text); font-size: var(--fs-body-sm); }
+.setting-input:focus { border-color: var(--accent-line); }
+.key-reveal { align-items: flex-start; }
+.key-value { display: block; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--accent-line); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--color-text); font-family: var(--font-mono); font-size: var(--fs-small); overflow-wrap: anywhere; user-select: all; }
+.key-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.revoked-keys { display: block; color: var(--color-text-muted); font-size: var(--fs-small); }
+.revoked-keys summary { cursor: pointer; }
+.revoked-keys p { margin: 8px 0 0; }
+.cli-login .code-display { margin: 8px 0 12px; font-family: var(--font-mono); font-size: 34px; font-weight: 600; letter-spacing: .12em; color: var(--color-text); }
+.cli-login .code-input { max-width: 220px; margin: 0 0 12px; text-align: center; font-family: var(--font-mono); font-size: 20px; letter-spacing: .12em; text-transform: uppercase; }
 @media (max-width: 640px) {
   .settings-dialog { width: 100%; height: 100dvh; margin: 0; border-radius: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   .settings-head { padding-left: 16px; }

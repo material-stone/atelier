@@ -5,8 +5,8 @@
 ## 구조
 
 ```
-atelier-upload CLI (tools/atelier-upload)
-  │ 1. POST /games  (API 키, 게임 정보, 파일 크기)
+atelier-cli (tools/atelier-cli)
+  │ 1. POST /games  (업로드 키, 게임 정보, 파일 크기)
   ▼
 uploadApi 함수 (asia-northeast3) ── 게임 문서 갱신 + 업로드 세션 URL 발급
   │ 2. 표지·ZIP을 세션 URL로 Cloud Storage에 직접 PUT (8MiB씩, 끊기면 이어서)
@@ -24,57 +24,91 @@ CLI가 GET /games/{id}를 5초마다 확인해 공개 또는 실패를 출력
 
 ## 처음 한 번 설정
 
-1. API 키를 만들어 Secret Manager에 넣습니다. 출력된 값은 3번에서 씁니다.
-
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-   firebase functions:secrets:set UPLOAD_API_KEY
-   ```
-
-2. 함수를 배포합니다. `processBuildZip`, `createOrUpdateGameDraft`, `deleteGame`도 바뀌었으므로 전체를 배포합니다. 출력되는 `uploadApi` URL을 적어 둡니다.
+1. 함수를 배포합니다. 미리 준비할 시크릿은 없습니다. 사이트도 main에 push되면 GitHub Pages로 함께 배포됩니다(승인 페이지 `/cli-login`과 설정 창의 업로드 키 탭).
 
    ```bash
    firebase deploy --only functions
    ```
 
-3. CLI를 전역 명령으로 설치합니다. **Atelier 원본 체크아웃**(worktree가 아닌 곳)에서 실행해야 나중에 worktree가 지워져도 링크가 깨지지 않습니다. 링크라서 저장소를 pull하면 바로 새 버전이 됩니다.
+2. CLI를 전역 명령으로 설치합니다. npm에 올라가 있으면 어느 PC에서든 이렇게 설치합니다.
 
    ```bash
-   cd D:/project/dev/alone/Atelier/tools/atelier-upload
-   npm link
+   npm install -g @material-stone/atelier-cli
    ```
 
-4. URL과 키를 저장합니다. `~/.atelier-upload/config`에 저장되어 이 PC의 모든 프로젝트가 같은 키를 씁니다. 키 확인은 `atelier-upload --config`(키는 가려서 표시)로 합니다.
+   저장소 코드를 바로 쓰려면 **Atelier 원본 체크아웃**(worktree가 아닌 곳)의 `tools/atelier-cli`에서 `npm link`를 실행합니다. 링크라서 저장소를 pull하면 바로 새 버전이 됩니다. worktree에서 링크하면 worktree가 지워질 때 명령이 깨집니다.
+
+3. 로그인합니다. 브라우저가 열리면 관리자 Google 계정으로 로그인하고, 터미널에 보이는 코드와 같은지 확인한 뒤 승인합니다. 이 기기 전용 키가 `~/.atelier-cli/config`에 저장되어, 이 PC의 모든 프로젝트가 같은 키를 씁니다. 키 원문은 화면에 나오지 않습니다.
 
    ```bash
-   atelier-upload --init
+   atelier-cli login
    ```
 
-5. Claude가 다른 프로젝트에서도 쓰도록 스킬을 전역 스킬 폴더에 복사합니다. 원본은 `tools/atelier-upload/skill/SKILL.md`이며, 고치면 다시 복사합니다.
+4. Claude가 다른 프로젝트에서도 쓰도록 스킬을 전역 스킬 폴더에 복사합니다. 원본은 `tools/atelier-cli/skill/SKILL.md`이며, 고치면 다시 복사합니다.
 
    ```bash
    mkdir -p ~/.claude/skills/atelier-upload
-   cp tools/atelier-upload/skill/SKILL.md ~/.claude/skills/atelier-upload/SKILL.md
+   cp tools/atelier-cli/skill/SKILL.md ~/.claude/skills/atelier-upload/SKILL.md
    ```
 
-설정은 환경변수 > `~/.atelier-upload/config` > `tools/atelier-upload/.env` 순서로 읽습니다.
+설정은 환경변수 > `~/.atelier-cli/config` 순서로 읽고, 서버 주소는 둘 다 없으면 기본값을 씁니다. 확인은 `atelier-cli config`(키는 가려서 표시)로 합니다.
+
+## npm 배포
+
+패키지 이름은 `@material-stone/atelier-cli`, 명령 이름은 `atelier-cli`입니다(`atelier-cli`라는 패키지 이름은 npm에서 이미 다른 사람이 쓰고 있습니다). 올리는 파일은 `cli.mjs`와 `README.md`뿐이고, 스킬과 키는 들어가지 않습니다.
+
+```bash
+cd tools/atelier-cli
+npm version patch        # 버전 올리기
+npm publish              # npm 로그인과 npm의 material-stone 조직 권한 필요
+```
+
+설치는 누구나 할 수 있지만, 키는 Atelier 관리자가 승인해야 받을 수 있어서 관리자가 아니면 업로드할 수 없습니다.
+
+## 업로드 키
+
+키는 Atelier가 발급하고, 서버에는 SHA-256 해시만 `apiKeys/{hash}`에 저장합니다(클라이언트 접근 불가). 그래서 키 원문은 발급 직후 한 번만 볼 수 있습니다.
+
+| 하는 일 | 방법 |
+| --- | --- |
+| 이 기기에 키 받기 | `atelier-cli login` → 브라우저에서 승인 |
+| 브라우저 없는 곳(CI, 서버)용 키 | 설정 → 업로드 키 → 새 키 발급 → 복사해 `ATELIER_UPLOAD_KEY` 환경변수에 넣거나 `atelier-cli login --with-key`로 붙여 넣기 |
+| 키 목록, 마지막 사용 시각 보기 | 설정 → 업로드 키 (관리자에게만 보임) |
+| 키 폐기 | 설정 → 업로드 키 → 폐기. 즉시 적용되고 재배포가 필요 없습니다 |
+| 이 기기에서 로그아웃 | `atelier-cli logout` (서버에서 폐기하고 설정 파일에서 지움) |
+
+### CLI 로그인 흐름
+
+```
+CLI ── POST /cli/sessions ──▶ uploadApi: 코드(BX4K-9TQM)와 폴링 토큰 발급, 10분 유효
+ │  브라우저로 SITE_URL/cli-login?code=BX4K-9TQM 열기
+ │                              관리자: Google 로그인 → 코드 확인 → 승인 (approveCliLogin)
+CLI ── POST /cli/sessions/{id}/token (3초마다) ──▶ 승인됐으면 이때 키를 만들어 한 번만 돌려줌
+ ▼
+~/.atelier-cli/config에 저장
+```
+
+- 승인 전에는 키가 존재하지 않고, 승인 후 CLI가 받아 가는 순간 만들어집니다. 그래서 키 원문은 서버 어디에도 저장되지 않습니다.
+- 폴링 토큰은 CLI만 갖고 있어서, 코드를 본 다른 사람이 키를 받아 갈 수 없습니다.
+- 인증 없이 열린 경로라서 만료된 요청은 새 요청이 올 때 지우고, 진행 중인 요청은 최대 20개로 제한합니다.
+- 승인 페이지 주소는 Functions 파라미터 `SITE_URL`(기본값 `https://material-stone-games.github.io/atelier`)로 만듭니다.
 
 ## 사용법
 
 ```bash
 # 새 게임 (표지 필수)
-atelier-upload --zip build.zip --title "Ember Archive" --access public --genres "Adventure,Puzzle" --description "조작: 방향키" --cover cover.png
+atelier-cli upload build.zip --title "Ember Archive" --access public --genres "Adventure,Puzzle" --description "조작: 방향키" --cover cover.png
 
 # 기존 게임에 새 빌드만 (게임 정보는 그대로)
-atelier-upload --zip build.zip --title "Ember Archive"
-atelier-upload --zip build.zip --game <gameId>
+atelier-cli upload build.zip --title "Ember Archive"
+atelier-cli upload build.zip --game <gameId>
 
 # 상태 확인, 미리 검사
-atelier-upload --status <gameId>
-atelier-upload --zip build.zip --title "Ember Archive" --dry-run
+atelier-cli status <gameId>
+atelier-cli upload build.zip --title "Ember Archive" --dry-run
 ```
 
-전체 옵션은 `--help`로 봅니다. Node 18 이상이면 의존성 설치가 필요 없습니다. 전역 설치 전에는 `node tools/atelier-upload/upload.mjs`로 실행합니다.
+전체 옵션은 `atelier-cli help`로 봅니다. Node 18 이상이면 의존성 설치가 필요 없습니다. 전역 설치 전에는 `node tools/atelier-cli/cli.mjs`로 실행합니다.
 
 다른 프로젝트에서 Claude에게 "Atelier에 올려줘"라고 하면 `atelier-upload` 스킬이 빌드 폴더를 ZIP으로 묶고 이 CLI로 올립니다.
 
@@ -84,7 +118,7 @@ atelier-upload --zip build.zip --title "Ember Archive" --dry-run
 | --- | --- |
 | 전송 중 연결이 잠깐 끊김 | 최대 5번 다시 시도하고, 서버가 받은 위치부터 이어서 올립니다 |
 | Ctrl+C | 업로드 세션을 끊고 서버를 되돌립니다. 새 게임은 문서·표지·초대 목록을 지우고, 업데이트는 대기 표시만 지워 이전 빌드가 계속 공개됩니다 |
-| 재시도 실패, 창 닫기, PC 종료 | 진행 상태를 `~/.atelier-upload/state/`에 남깁니다. **같은 명령을 다시 실행하면 이어서** 올립니다 |
+| 재시도 실패, 창 닫기, PC 종료 | 진행 상태를 `~/.atelier-cli/state/`에 남깁니다. **같은 명령을 다시 실행하면 이어서** 올립니다 |
 | 이어 올리지 않고 그만두기 | 같은 명령에 `--cancel`을 붙여 실행하면 Ctrl+C와 같이 되돌립니다 |
 | ZIP을 다 올린 뒤 Ctrl+C | 서버 처리는 이미 시작돼 취소하지 않고, 기다리기만 멈춥니다 |
 
@@ -95,7 +129,19 @@ atelier-upload --zip build.zip --title "Ember Archive" --dry-run
 
 ## API 명세
 
-모든 요청에 `Authorization: Bearer <UPLOAD_API_KEY>` 헤더가 필요합니다.
+CLI 로그인 두 경로를 빼면 모든 요청에 `Authorization: Bearer <업로드 키>` 헤더가 필요합니다. 없거나 폐기된 키는 `401`입니다.
+
+### `POST /cli/sessions` (인증 없음)
+
+본문 `{ label }`(키 목록에 보일 이름). 응답: `{ sessionId, pollToken, userCode, verificationUrl, expiresIn, interval }`.
+
+### `POST /cli/sessions/{sessionId}/token` (인증 없음)
+
+본문 `{ pollToken }`. 승인 대기 중이면 `202`, 승인되면 `200 { key, label }`(한 번만), 거절·만료면 `410`, 토큰이 틀리면 `404`.
+
+### `DELETE /keys/self`
+
+요청에 쓴 키를 폐기합니다(`atelier-cli logout`).
 
 ### `POST /games`
 
@@ -127,7 +173,9 @@ ZIP 업로드를 끝내지 못한 초안을 되돌립니다. 응답: `{ result }
 
 ## 보안
 
-- API 키는 관리자 권한과 같습니다. 노출되면 바로 `firebase functions:secrets:set UPLOAD_API_KEY`로 바꾸고 `uploadApi`를 다시 배포합니다.
-- 키 비교는 상수 시간으로 하고, 시크릿이 비어 있으면 어떤 키도 통과하지 못합니다.
+- 업로드 키는 업로드에 관해 관리자 권한과 같습니다. 노출되면 설정 → 업로드 키에서 바로 폐기합니다. 재배포는 필요 없습니다.
+- 키는 `atl_`로 시작하는 32바이트 난수라서 해시만으로 안전하게 저장할 수 있고, 유출된 키를 로그나 스캐너에서 알아보기 쉽습니다.
+- 발급·목록·폐기·CLI 승인은 기존 관리자 기능처럼 관리자 계정 + App Check가 필요합니다.
+- CLI 승인 페이지는 요청한 기기 이름과 코드를 보여 줍니다. 터미널의 코드와 같을 때만 승인합니다. 남이 보낸 링크로 들어왔다면 승인하지 않습니다.
 - 업로드 세션 URL은 그 자체로 쓰기 권한이 있으므로 로그나 공개된 곳에 남기지 않습니다. 정해진 경로 한 곳에만 쓸 수 있고, ZIP 검사는 `processBuildZip`이 똑같이 합니다.
 - 함수 인스턴스는 최대 1개(`maxInstances: 1`)라서 잘못된 요청이 몰려도 비용이 늘지 않습니다. 실제 파일 전송은 함수를 거치지 않으므로 업로드 속도에는 영향이 없습니다.

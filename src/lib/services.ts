@@ -354,6 +354,37 @@ export function deleteStorageOrphans(paths: string[]): Promise<{ deleted: number
   return callAdmin("deleteStorageOrphans", { paths });
 }
 
+/** Upload API keys. The server keeps only hashes, so a key is shown once, right after it is issued. */
+export interface ApiKeyInfo {
+  id: string;
+  label: string;
+  preview: string;
+  source: string;
+  createdAt: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+export async function listApiKeys(): Promise<ApiKeyInfo[]> {
+  return (await callAdmin<Record<string, never>, { keys: ApiKeyInfo[] }>("listApiKeys", {})).keys;
+}
+
+export function createApiKey(label: string): Promise<{ key: string; label: string }> {
+  return callAdmin("createApiKey", { label });
+}
+
+export function revokeApiKey(id: string): Promise<{ ok: boolean }> {
+  return callAdmin("revokeApiKey", { id });
+}
+
+export function describeCliLogin(code: string): Promise<{ userCode: string; label: string; expiresAt: string }> {
+  return callAdmin("describeCliLogin", { code });
+}
+
+export function approveCliLogin(code: string, approve: boolean): Promise<{ ok: boolean; label: string }> {
+  return callAdmin("approveCliLogin", { code, approve });
+}
+
 export async function uploadFile(
   path: string,
   file: File,

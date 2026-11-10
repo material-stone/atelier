@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { AccessLevel, AuthState, Comment, Game, Post, TargetType } from "./types";
 import { ManagePage } from "./ManagePage";
+import { ApiKeySettings, CliLoginPage } from "./ApiKeys";
 import { PrivacyPage } from "./PrivacyPage";
 
 // three.js is heavy, so the gem animation on the about page loads in its own chunk.
@@ -139,6 +140,7 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
           <Route path="/about" element={<AboutPage />} />
           <Route path="/admin" element={<AdminPage auth={auth} onNotify={notify} />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/cli-login" element={<CliLoginPage auth={auth} onNotify={notify} />} />
           {/* Addresses from the old layout, kept so shared links still land somewhere. */}
           <Route path="/hub" element={<Navigate to="/" replace />} />
           <Route path="/hub/community" element={<Navigate to="/community" replace />} />
@@ -224,10 +226,11 @@ function ThemeSwitch({ theme, onTheme }: { theme: ThemePreference; onTheme: (the
   );
 }
 
-type SettingsTab = "general" | "account";
+type SettingsTab = "general" | "account" | "keys";
 
 /**
- * Settings in a modal <dialog>: General (theme, recent plays) and Account (subscription, membership, sign out).
+ * Settings in a modal <dialog>: General (theme, recent plays), Account (subscription, membership, sign out)
+ * and, for admins, upload API keys.
  * On desktop the tabs switch panels; on phones the dialog fills the screen and both panels stack.
  */
 function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onClearRecent, onNotify }: { open: boolean; onClose: () => void; auth: AuthState; theme: ThemePreference; onTheme: (theme: ThemePreference) => void; recentCount: number; onClearRecent: () => void; onNotify: Notify }) {
@@ -257,6 +260,7 @@ function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onCl
         <div className="settings-tabs" role="group" aria-label="설정 항목">
           <button type="button" aria-pressed={tab === "general"} onClick={() => setTab("general")}><GearIcon />일반</button>
           <button type="button" aria-pressed={tab === "account"} onClick={() => setTab("account")}><PersonIcon />계정</button>
+          {auth.isAdmin ? <button type="button" aria-pressed={tab === "keys"} onClick={() => setTab("keys")}><KeyIcon />업로드 키</button> : null}
         </div>
         <div className="settings-panels">
           <section className={panelClass("general")} aria-labelledby="settings-general">
@@ -298,6 +302,13 @@ function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onCl
               </div>
             )}
           </section>
+          {auth.isAdmin ? (
+            <section className={panelClass("keys")} aria-labelledby="settings-keys">
+              <h3 id="settings-keys" className="settings-section-title">업로드 키</h3>
+              {/* Mounted only while the dialog is open, so the key list loads when someone looks at it. */}
+              {open ? <ApiKeySettings onNotify={onNotify} /> : null}
+            </section>
+          ) : null}
         </div>
       </div>
     </dialog>
@@ -1067,6 +1078,7 @@ function GamepadIcon() { return <Icon><rect x="2" y="5" width="14" height="8.5" 
 function CheckIcon() { return <Icon size={16}><path d="M3.5 9.5l3.5 3.5 7.5-8" /></Icon>; }
 function FullscreenIcon() { return <Icon size={16}><path d="M2.5 6.5v-4h4M11.5 2.5h4v4M15.5 11.5v4h-4M6.5 15.5h-4v-4" /></Icon>; }
 function GearIcon() { return <Icon size={17}><path d="M7.6 2h2.8l.4 2 1.4.8 1.9-.7 1.4 2.4-1.5 1.3v1.6l1.5 1.3-1.4 2.4-1.9-.7-1.4.8-.4 2H7.6l-.4-2-1.4-.8-1.9.7-1.4-2.4 1.5-1.3V8.2L2.5 6.9l1.4-2.4 1.9.7 1.4-.8z" /><circle cx="9" cy="9" r="2.3" /></Icon>; }
+function KeyIcon() { return <Icon size={17}><circle cx="6" cy="11.5" r="3" /><path d="M8.2 9.3L14.5 3M12 5.5l2 2M10.5 7l1.5 1.5" /></Icon>; }
 function LogoutIcon() { return <Icon size={17}><path d="M7 15H3.5V3H7M11.5 12.5L15 9l-3.5-3.5M15 9H7" /></Icon>; }
 function LoginIcon() { return <Icon size={17}><path d="M11 3h3.5v12H11M6.5 5.5L10 9l-3.5 3.5M10 9H2.5" /></Icon>; }
 function ChevronRightIcon() { return <Icon size={14}><path d="M7 4.5L11.5 9 7 13.5" /></Icon>; }
