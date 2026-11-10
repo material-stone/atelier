@@ -59,9 +59,14 @@ CLI가 GET /games/{id}를 5초마다 확인해 공개 또는 실패를 출력
 
 ```bash
 cd tools/atelier-cli
-npm version patch        # 버전 올리기
-npm publish              # npm 로그인과 npm의 material-stone 조직 권한 필요
+npm version patch            # 버전 올리기
+npm publish --auth-type=web  # 브라우저 인증 링크가 나오면 보안 키로 승인
 ```
+
+- npm 로그인(`npm login --auth-type=web`)과 npm `material-stone` 조직 권한이 필요합니다.
+- npm 계정은 2단계 인증이 필수입니다. 새로 설정할 때는 보안 키(Windows Hello, 패스키 등)만 고를 수 있어서, `--otp` 코드 대신 브라우저 인증으로 게시합니다.
+- 반드시 `tools/atelier-cli`에서 실행합니다. 저장소 루트는 웹사이트 패키지라 `private`로 막혀 있습니다.
+- `.gitattributes`가 이 폴더의 줄바꿈을 LF로 고정합니다. CRLF로 올라가면 macOS·Linux에서 `#!/usr/bin/env node`가 깨집니다.
 
 설치는 누구나 할 수 있지만, 키는 Atelier 관리자가 승인해야 받을 수 있어서 관리자가 아니면 업로드할 수 없습니다.
 
