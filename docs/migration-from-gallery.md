@@ -15,7 +15,7 @@
 | `ADMIN_UID` 환경변수 | `admin: true` custom claim | `npm --prefix functions run set-admin -- <email>` |
 | 비구독자 주간 랜덤 3~5개 | `subscriber` 게임 중 KST 주간 로테이션 | 클라이언트·서버가 같은 시드 사용 |
 | `member` 티어·얼리 액세스 | `accessLevel: member` + `users.memberUntil` | 아래 주의 참고 |
-| 관리자 수정·삭제·Storage 통계·고아 정리 | Admin 페이지 하단 Manage games / Storage | `updateGameMeta`, `deleteGame`, `storageReport`, `deleteStorageOrphans` |
+| 관리자 수정·삭제·Storage 통계·고아 정리 | 관리 페이지의 게임 목록 / 저장 공간 탭 | `updateGameMeta`, `deleteGame`, `storageReport`, `deleteStorageOrphans` |
 | Unity WebGL | ZIP 업로드 그대로 지원 | `.gz`/`.br` asset에 `Content-Encoding` 헤더 자동 설정 |
 
 ### 환경값 대응
@@ -67,7 +67,7 @@ npm --prefix functions run migrate-gallery -- --source-key=... --target-project=
 - 이미 대상에 있는 사용자·게임은 건너뛰므로 다시 실행해도 안전합니다.
 - 모든 게임을 공개로 옮기려면 `--default-access=public`을 붙입니다. 기본은 원조처럼 `subscriber`(주간 로테이션 + 구독자)입니다.
 - 실행 후 관리자 계정에 claim을 부여합니다: `npm --prefix functions run set-admin -- <관리자 email>`.
-- Admin → Manage games에서 6개 게임이 `PUBLISHED`가 되는지, 각 게임이 실제로 플레이되는지 확인합니다.
+- 관리 → 게임 목록에서 6개 게임이 `PUBLISHED`가 되는지, 각 게임이 실제로 플레이되는지 확인합니다.
 
 ## 4. Atelier 배포
 

@@ -10,7 +10,7 @@
 - 게임 플레이: `/atelier/game/:gameId`
 - 커뮤니티: `/atelier/community`
 - Atelier 소개: `/atelier/about`
-- 관리자(업로드 룸): `/atelier/admin`
+- 관리: `/atelier/admin` (게임 목록·추가·수정·삭제, 저장 공간)
 - 예전 주소 `/atelier/hub/...`는 새 주소로 넘어갑니다.
 - Firebase Functions 리전: `asia-northeast3`
 

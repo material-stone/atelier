@@ -249,7 +249,15 @@ export function subscribeToAllGames(callback: (games: Game[]) => void): () => vo
     return () => undefined;
   }
   const gamesQuery = query(collection(db, "games"), orderBy("updatedAt", "desc"));
-  return onSnapshot(gamesQuery, (snapshot) => callback(snapshot.docs.map(mapGame)), () => callback([]));
+  // The management list shows each cover, so resolve their URLs like the public list does.
+  return onSnapshot(
+    gamesQuery,
+    async (snapshot) => callback(await Promise.all(snapshot.docs.map(async (item) => {
+      const game = mapGame(item);
+      return { ...game, coverUrl: await coverUrl(game.coverPath) };
+    }))),
+    () => callback([]),
+  );
 }
 
 export function subscribeToPosts(callback: (posts: Post[]) => void): () => void {
