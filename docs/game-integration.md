@@ -140,19 +140,22 @@ window.addEventListener("message", (event) => {
 | 플레이어 → 게임 | `{ type: "atelier:storage-ready", items: { [key]: string } }` | 이 게임에 저장된 모든 키-값을 한 번에 보냅니다. 게임은 이것을 메모리에 두고 동기적으로 읽습니다. |
 | 게임 → 플레이어 | `{ type: "atelier:storage-set", key, value }` | 값은 문자열입니다(JSON 직렬화는 게임이 합니다). 응답은 없습니다. |
 | 게임 → 플레이어 | `{ type: "atelier:storage-remove", key }` | 키를 지웁니다. |
-| 플레이어 → 게임 | `{ type: "atelier:storage-error", key, reason }` | 저장하지 못했을 때만 옵니다. `reason`은 `invalid-key`, `invalid-value`, `quota`, `write-failed` 중 하나입니다. |
+| 플레이어 → 게임 | `{ type: "atelier:storage-error", key, reason }` | 저장하거나 불러오지 못했을 때만 옵니다. `reason`은 `invalid-key`, `invalid-value`, `quota`, `write-failed`, `load-failed` 중 하나입니다. `storage-hello`에 대한 `load-failed`는 `key`가 `null`입니다. |
 
 - 플레이어는 `storage-set`을 받자마자 저장합니다. 저장 직후 `location.reload()`해도 값이 남고, 다시 보낸 `storage-hello`에는 새 값이 들어 있습니다.
 - 플레이 세션이 바뀌어도(페이지를 새로 열거나 세션 주소가 바뀌어도) 같은 게임이면 같은 세이브가 나옵니다.
 - 한도: 게임당 5MB(키와 값의 글자 수 × 2바이트), 키 길이 256자. 넘으면 저장하지 않고 `quota`나 `invalid-key` 오류를 보냅니다.
+- **`load-failed`는 "세이브 없음"이 아닙니다.** 플레이어가 기기의 세이브를 잠깐 읽지 못한 것입니다. 이때 `storage-ready`는 오지 않고, 다시 `storage-hello`를 보내면 다시 불러옵니다. 불러오지 못한 동안 보낸 `storage-set`·`storage-remove`는 저장하지 않고 같은 오류로 돌아옵니다. 빈 세이브로 보고 새 게임을 저장하면 남아 있는 진짜 세이브를 덮어쓰기 때문입니다.
 - 세이브는 기기(브라우저)마다 따로 저장됩니다. 기기 간 이어하기는 아직 지원하지 않습니다.
 
 ### 게임 쪽 예시
 
-`storage-hello`를 보내고 `storage-ready`를 기다립니다. 1.5초 안에 오지 않으면 Atelier 밖(직접 연 빌드, 다른 사이트)으로 보고 `localStorage`를 씁니다. 어느 쪽이든 `getItem`·`setItem`·`removeItem`을 같은 모양으로 쓸 수 있습니다.
+`storage-hello`를 보내고 `storage-ready`를 기다립니다. 1.5초 안에 플레이어가 아무 답도 하지 않으면 Atelier 밖(직접 연 빌드, 다른 사이트)으로 보고 `localStorage`를 씁니다. 어느 쪽이든 `getItem`·`setItem`·`removeItem`을 같은 모양으로 쓸 수 있습니다.
+
+`load-failed`가 오면 0.5초 간격으로 세 번까지 다시 묻고, 그래도 실패하면 Promise가 거부됩니다. 이때 `localStorage`로 넘어가지 않습니다. 플레이어가 답했으니 Atelier 안이고, iframe `localStorage`에 쓰면 세이브가 다시 사라질 수 있기 때문입니다.
 
 ```js
-function createAtelierStorage({ timeout = 1500, migrateKeys = [], onError } = {}) {
+function createAtelierStorage({ timeout = 1500, retries = 3, retryDelay = 500, migrateKeys = [], onError } = {}) {
   const local = {
     mode: "local",
     getItem: (key) => { try { return localStorage.getItem(key); } catch { return null; } },
@@ -161,8 +164,9 @@ function createAtelierStorage({ timeout = 1500, migrateKeys = [], onError } = {}
   };
   if (window.parent === window) return Promise.resolve(local);
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let items = null;
+    let failures = 0;
     const send = (message) => window.parent.postMessage(message, "*");
     const bridge = {
       mode: "atelier",
@@ -171,16 +175,24 @@ function createAtelierStorage({ timeout = 1500, migrateKeys = [], onError } = {}
       removeItem: (key) => { delete items[key]; send({ type: "atelier:storage-remove", key }); },
     };
     window.addEventListener("message", (event) => {
-      if (event.source !== window.parent) return;
-      const data = event.data;
-      if (data?.type === "atelier:storage-error") onError?.(data.key, data.reason);
-      if (data?.type !== "atelier:storage-ready" || items) return;
+      if (event.source !== window.parent || typeof event.data?.type !== "string" || !event.data.type.startsWith("atelier:storage-")) return;
+      // 플레이어가 답했으니 Atelier 안이다. 실패하더라도 localStorage로 넘어가지 않는다.
       clearTimeout(timer);
+      const data = event.data;
+      if (data.type === "atelier:storage-error" && data.reason === "load-failed" && !items) {
+        // 세이브를 읽지 못한 것이지 세이브가 없는 것이 아니다. 잠시 뒤 다시 묻고, 계속 실패하면 게임이 알린다.
+        failures += 1;
+        if (failures <= retries) setTimeout(() => send({ type: "atelier:storage-hello" }), retryDelay);
+        else { items = {}; reject(new Error("atelier:load-failed")); }
+        return;
+      }
+      if (data.type === "atelier:storage-error") onError?.(data.key, data.reason);
+      if (data.type !== "atelier:storage-ready" || items) return;
       items = { ...data.items };
       migrate(bridge);
       resolve(bridge);
     });
-    // ready가 오지 않으면 Atelier 밖(다른 사이트에 끼워 넣었거나 브리지가 없는 플레이어)이다.
+    // 아무 답이 없으면 Atelier 밖(다른 사이트에 끼워 넣었거나 브리지가 없는 플레이어)이다.
     const timer = setTimeout(() => { if (!items) { items = {}; resolve(local); } }, timeout);
     send({ type: "atelier:storage-hello" });
   });
@@ -198,15 +210,24 @@ function createAtelierStorage({ timeout = 1500, migrateKeys = [], onError } = {}
 ```
 
 ```js
-const storage = await createAtelierStorage({
-  migrateKeys: ["onion-debt-save"],
-  onError: (key, reason) => console.warn("세이브 실패", key, reason),
-});
+async function boot() {
+  let storage;
+  try {
+    storage = await createAtelierStorage({
+      migrateKeys: ["onion-debt-save"],
+      onError: (key, reason) => console.warn("세이브 실패", key, reason),
+    });
+  } catch {
+    // 세이브를 읽지 못했습니다. "세이브 없음"으로 보고 새 게임을 시작하지 않습니다.
+    showMessage("세이브를 불러오지 못했습니다. 페이지를 새로 고쳐 주세요.");
+    return;
+  }
 
-const save = JSON.parse(storage.getItem("onion-debt-save") ?? "null");
-// ...
-storage.setItem("onion-debt-save", JSON.stringify(state));
-location.reload(); // 바로 새로 고쳐도 남습니다.
+  const save = JSON.parse(storage.getItem("onion-debt-save") ?? "null");
+  // ...
+  storage.setItem("onion-debt-save", JSON.stringify(state));
+  location.reload(); // 바로 새로 고쳐도 남습니다.
+}
 ```
 
 게임 시작 코드에서 `localStorage`를 직접 부르던 곳을 `storage`로 바꾸면 됩니다. 게임을 시작하기 전에 `createAtelierStorage()`를 기다려야 첫 화면에서 이어하기 여부를 바로 알 수 있습니다.
