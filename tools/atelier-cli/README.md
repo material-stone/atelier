@@ -1,6 +1,6 @@
 # atelier-cli
 
-[Atelier](https://material-stone.github.io/atelier/)에 웹빌드 게임을 브라우저 없이 올리는 명령줄 도구입니다. Atelier 관리자 계정이 있어야 쓸 수 있습니다.
+[Atelier](https://atelier.materialstone.dev)에 웹빌드 게임을 브라우저 없이 올리는 명령줄 도구입니다. Atelier 관리자 계정이 있어야 쓸 수 있습니다.
 
 ## 설치
 

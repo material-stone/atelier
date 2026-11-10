@@ -20,12 +20,12 @@ npm test
 npm run build
 ```
 
-`npm run build`는 GitHub Pages 프로젝트 경로(`/atelier/`)를 포함한 `dist/`와 SPA 새로고침용 `dist/404.html`을 생성합니다.
+`npm run build`는 사이트 루트(`/`) 기준의 `dist/`와 SPA 새로고침용 `dist/404.html`을 생성합니다.
 
 ## Firebase setup
 
 1. Firebase 프로젝트를 Blaze 요금제로 전환합니다. Cloud Storage와 Cloud Functions가 필요합니다.
-2. Google Authentication을 켜고 `material-stone.github.io`를 authorized domain에 추가합니다.
+2. Google Authentication을 켜고 `atelier.materialstone.dev`를 authorized domain에 추가합니다.
 3. Firestore, Storage, Cloud Functions를 초기화한 뒤 Rules와 indexes를 배포합니다.
 4. YouTube Data API를 활성화하고 Functions 환경값을 설정합니다.
 
@@ -51,6 +51,8 @@ npm --prefix functions run set-admin -- admin@example.com
 관리자 계정은 로그아웃 후 다시 로그인해야 새 claim이 반영됩니다.
 
 ## GitHub Pages
+
+사이트 주소는 `https://atelier.materialstone.dev`입니다. Cloudflare DNS에 `atelier` CNAME → `material-stone.github.io`(프록시 끔, DNS only)를 두고, Repository Settings → Pages → Custom domain에 같은 주소를 넣습니다. `material-stone.github.io/atelier`와 옛 주소 `material-stone-games.github.io/atelier`는 이 주소로 넘어갑니다.
 
 Repository Settings → Pages에서 Source를 **GitHub Actions**로 선택합니다. 다음 Repository Variables를 등록하면 `main` push마다 Pages가 배포됩니다.
 

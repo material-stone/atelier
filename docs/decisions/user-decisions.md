@@ -2,6 +2,13 @@
 
 사용자가 정한 방향과 요구사항, 그 이유입니다. Claude의 설계 판단은 [claude-decisions.md](claude-decisions.md)에 있습니다.
 
+## 2026-11-10 · atelier.materialstone.dev 도메인 연결
+
+### 자체 도메인 materialstone.dev를 쓰고, 아틀리에는 서브도메인으로
+
+- **결정:** 사용자는 나중에 다른 웹페이지 그룹도 만들 수 있게 `materialstone.dev`를 쓰자고 했다(처음 제안은 `materialstone.dev/atelier`). Claude가 로그인이 있는 아틀리에는 서브도메인 `atelier.materialstone.dev`가 낫다고 추천했고, 사용자가 그대로 승인했다.
+- **이유:** 여러 웹페이지를 한 도메인 아래 묶기 위해. 서브도메인을 택한 이유는 Claude 판단 참고.
+
 ## 2026-11-10 · atelier 저장소를 material-stone 조직으로 이전
 
 ### GitHub 조직 이름은 material-stone, atelier를 그리로 옮긴다

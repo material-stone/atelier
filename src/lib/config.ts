@@ -1,4 +1,4 @@
-export const APP_BASE_PATH = "/atelier";
+export const APP_BASE_PATH = "/";
 
 const env = import.meta.env;
 

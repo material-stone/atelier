@@ -5,13 +5,13 @@
 문서 기준 주소는 다음과 같습니다.
 
 - 저장소: <https://github.com/material-stone/atelier>
-- GitHub Pages: <https://material-stone.github.io/atelier/>
-- 홈(게임 검색): `/atelier/`
-- 게임 플레이: `/atelier/game/:gameId`
-- 커뮤니티: `/atelier/community`
-- Atelier 소개: `/atelier/about`
-- 관리: `/atelier/admin` (게임 목록·추가·수정·삭제, 저장 공간)
-- 예전 주소 `/atelier/hub/...`는 새 주소로 넘어갑니다.
+- GitHub Pages: <https://atelier.materialstone.dev>
+- 홈(게임 검색): `/`
+- 게임 플레이: `/game/:gameId`
+- 커뮤니티: `/community`
+- Atelier 소개: `/about`
+- 관리: `/admin` (게임 목록·추가·수정·삭제, 저장 공간)
+- 예전 주소 `/hub/...`는 새 주소로 넘어갑니다.
 - Firebase Functions 리전: `asia-northeast3`
 
 현재 저장소에는 프런트엔드, Firebase Rules, Cloud Functions, GitHub Actions workflow가 준비되어 있습니다. 실제 운영을 시작하려면 Firebase 프로젝트와 결제 계정, Google/YouTube 설정, 관리자 claim, GitHub Actions 변수와 실제 콘텐츠를 운영자가 입력해야 합니다. 이 값들은 저장소에 임의의 예시값으로 넣지 않습니다.
@@ -31,8 +31,8 @@
 | YouTube 채널 ID | `UC...` 형식의 실제 채널 ID | Functions와 Pages 변수 |
 | YouTube 공개 URL | `https://www.youtube.com/@...` | 홈·프로토타입 안내 링크 |
 | Discord 초대 URL | 실제 초대 링크 | 홈·푸터 링크 |
-| Pages origin | `https://material-stone.github.io` | `PAGES_ORIGIN` |
-| Pages 전체 URL | `https://material-stone.github.io/atelier/` | 브라우저·OAuth·출시 검수 |
+| Pages origin | `https://atelier.materialstone.dev` | `PAGES_ORIGIN` |
+| Pages 전체 URL | `https://atelier.materialstone.dev` | 브라우저·OAuth·출시 검수 |
 | Functions base URL | `https://asia-northeast3-YOUR_PROJECT_ID.cloudfunctions.net` | `FUNCTIONS_BASE_URL` |
 | 결제 계정 | Google Cloud Billing account | Firebase Blaze |
 | 예산 알림 수신자 | 운영 담당자 이메일 | Google Cloud Billing |
@@ -158,7 +158,7 @@ Firestore와 Functions는 가능한 한 `asia-northeast3` 또는 사용자와 �
 3. 프로젝트의 지원 이메일을 지정합니다.
 4. Authorized domains에 다음을 확인·추가합니다.
 
-   - `material-stone.github.io`
+   - `atelier.materialstone.dev`
    - 로컬 테스트용 `localhost`가 필요한지 확인
    - 별도 custom domain을 사용한다면 해당 host도 추가
 
@@ -214,7 +214,7 @@ firebase use --add
 
 ```dotenv
 YOUTUBE_CHANNEL_ID=UCxxxxxxxxxxxxxxxxxxxxxx
-PAGES_ORIGIN=https://material-stone.github.io
+PAGES_ORIGIN=https://atelier.materialstone.dev
 FUNCTIONS_BASE_URL=https://asia-northeast3-YOUR_PROJECT_ID.cloudfunctions.net
 ```
 
@@ -307,7 +307,7 @@ npm --prefix functions run set-admin -- admin@example.com
 1. 브라우저에서 Google 로그아웃
 2. 브라우저를 새로고침
 3. 같은 관리자 계정으로 다시 로그인
-4. `/atelier/admin` 접근
+4. `/admin` 접근
 5. 일반 사용자 계정으로 관리자 페이지가 거부되는지 확인
 
 Custom claim은 기존 ID token에 즉시 반영되지 않을 수 있습니다. 로그아웃/재로그인으로 token을 갱신합니다. 관리자 계정을 추가할 때마다 이 절차를 반복하고, 관리자 목록은 비밀번호 관리자나 운영 문서에서 별도로 관리합니다.
@@ -400,7 +400,7 @@ npm run build
 
 - `dist/index.html` 존재
 - `dist/404.html` 존재
-- `dist/404.html`에 root element와 `/atelier/assets/` 경로가 포함됨
+- `dist/404.html`에 root element와 `/assets/` 경로가 포함됨
 - `dist` 안에 `.env`, secret, Firebase Admin key가 없음
 
 로컬에서 실제 Pages 동작을 흉내 내기 위해 preview를 실행합니다.
@@ -411,11 +411,11 @@ npm run preview
 
 브라우저에서 다음 주소를 각각 직접 입력하고 새로고침합니다.
 
-- `http://127.0.0.1:4173/atelier/`
-- `http://127.0.0.1:4173/atelier/game/<게임 ID>`
-- `http://127.0.0.1:4173/atelier/community`
-- `http://127.0.0.1:4173/atelier/about`
-- `http://127.0.0.1:4173/atelier/admin`
+- `http://127.0.0.1:4173/`
+- `http://127.0.0.1:4173/game/<게임 ID>`
+- `http://127.0.0.1:4173/community`
+- `http://127.0.0.1:4173/about`
+- `http://127.0.0.1:4173/admin`
 
 ## 8. 실제 Pages 배포
 
@@ -456,7 +456,7 @@ git push origin main
 1. GitHub Actions에서 `Deploy Atelier to GitHub Pages` workflow를 엽니다.
 2. `Install dependencies`, `Build`, `Upload Pages artifact`, `Deploy to GitHub Pages`가 모두 성공하는지 확인합니다.
 3. 실패하면 workflow 로그에서 변수명, Node/npm 오류, Vite base path 오류를 먼저 확인합니다.
-4. Pages의 배포 URL이 `https://material-stone.github.io/atelier/`인지 확인합니다.
+4. Pages의 배포 URL이 `https://atelier.materialstone.dev`인지 확인합니다.
 5. Pages가 아직 이전 artifact를 보여주면 Actions의 배포 job과 Pages environment의 최신 deployment를 대조합니다.
 
 ## 9. 운영 전 기능 검수
@@ -465,12 +465,12 @@ git push origin main
 
 ### 9.1 페이지·라우팅
 
-- [ ] `/atelier/`를 직접 열었을 때 왼쪽 사이드바(모바일은 메뉴 서랍)와 게임 검색 화면이 표시된다.
+- [ ] `/`를 직접 열었을 때 왼쪽 사이드바(모바일은 메뉴 서랍)와 게임 검색 화면이 표시된다.
 - [ ] 사이드바의 YouTube 링크가 실제 채널로 이동한다.
 - [ ] 소개 화면의 Discord 버튼이 초대 링크로 이동한다(링크가 없으면 "준비 중"으로 비활성화된다).
-- [ ] `/atelier/game/<게임 ID>`를 직접 열고 새로고침해도 404가 아니다.
-- [ ] `/atelier/community`를 직접 열고 새로고침해도 404가 아니다.
-- [ ] `/atelier/admin`을 직접 열어 비관리자 접근이 차단된다.
+- [ ] `/game/<게임 ID>`를 직접 열고 새로고침해도 404가 아니다.
+- [ ] `/community`를 직접 열고 새로고침해도 404가 아니다.
+- [ ] `/admin`을 직접 열어 비관리자 접근이 차단된다.
 - [ ] 모바일 폭에서 카드, 게시판, 업로드 폼, 게임 플레이어가 화면 밖으로 넘치지 않는다.
 
 ### 9.2 Google 로그인과 접근 등급
@@ -685,7 +685,7 @@ git push origin main
 | 증상 | 먼저 확인할 것 | 조치 |
 | --- | --- | --- |
 | 화면에 데모 게임만 표시됨 | Firebase Web config가 비어 있는지 | `.env` 또는 GitHub Variables 6개 핵심 Firebase 값 확인 후 재빌드 |
-| Google 로그인에서 unauthorized domain | Firebase Auth Authorized domains | `material-stone.github.io`와 실제 접속 host 추가 |
+| Google 로그인에서 unauthorized domain | Firebase Auth Authorized domains | `atelier.materialstone.dev`와 실제 접속 host 추가 |
 | 관리자 페이지가 거부됨 | Auth custom claim과 token 갱신 | 이메일 확인, `set-admin` 재실행, 로그아웃/재로그인 |
 | 구독 확인 실패 | YouTube API, OAuth scope, channel ID | API Enable, `UC...` ID 확인, test user/동의 화면 확인 |
 | 게임 목록이 비어 있음 | Firestore `games.buildStatus`, Rules/indexes | `published` 여부, Rules/indexes 배포, Functions 오류 확인 |
@@ -696,7 +696,7 @@ git push origin main
 | 게시글 사진이 안 보임 | Storage Rules와 업로드 완료 여부 | 게시글 ID 경로, MIME type, 5MiB 제한, upload 후 URL 확인 |
 | 좋아요 수가 기대와 다름 | `likeRecords`와 transaction | 같은 사용자의 중복 기록, 잘못된 target ID, Functions 로그 확인 |
 | 비용이 갑자기 증가함 | Storage/Functions/Firestore 사용량 | App Check, Functions 로그, 대용량 빌드·이전 버전·봇 요청 확인 |
-| Pages asset 404 | Vite base와 `/atelier/` 경로 | `vite.config.ts`의 `/atelier/`, `dist/404.html`, Pages URL 확인 |
+| Pages asset 404 | Vite base(`/`) | `vite.config.ts`의 base, `dist/404.html`, Pages URL 확인 |
 
 ## 14. 참고 링크
 
