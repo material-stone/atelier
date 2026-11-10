@@ -1,24 +1,22 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { AccessLevel, AuthState, Comment, Game, Post, TargetType } from "./types";
-import { AdminTools } from "./AdminTools";
+import { ManagePage } from "./ManagePage";
 import { PrivacyPage } from "./PrivacyPage";
 
 // three.js is heavy, so the gem animation on the about page loads in its own chunk.
 const GemForge = lazy(() => import("./GemForge"));
-import { accessLabel, accessPermission, accessShortLabel, parseEmailList, rotationForGames } from "./lib/access";
+import { accessPermission, accessShortLabel, rotationForGames } from "./lib/access";
 import { APP_BASE_PATH } from "./lib/config";
 import { loadRecent, pushRecent, saveRecent } from "./lib/recent";
 import { filterGames, popularGenres } from "./lib/search";
 import { applyTheme, loadTheme, saveTheme, watchSystemTheme, type ThemePreference } from "./lib/theme";
 import {
   createComment,
-  createOrUpdateGameDraft,
   createPost,
   deleteComment,
   deletePost,
   findGameById,
-  findGameByTitle,
   getConfiguredDiscordUrl,
   getConfiguredYoutubeUrl,
   getDisplayName,
@@ -33,15 +31,11 @@ import {
   subscribeToPosts,
   toggleLike,
   uploadBoardImage,
-  uploadFile,
   verifyYoutubeSubscription,
 } from "./lib/services";
 import {
-  MAX_BUILD_BYTES,
   MAX_COMMENT_LENGTH,
   MAX_POST_LENGTH,
-  normalizeTitle,
-  validateBuild,
   validateCommentText,
   validateImage,
   validatePostText,
@@ -143,7 +137,7 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
           <Route path="/game/:gameId" element={<GameRoute auth={auth} games={games} onNotify={notify} onPlayed={markPlayed} />} />
           <Route path="/community" element={<CommunityPage auth={auth} posts={posts} games={games} onNotify={notify} />} />
           <Route path="/about" element={<AboutPage />} />
-          <Route path="/admin" element={<AdminPage auth={auth} games={games} onNotify={notify} />} />
+          <Route path="/admin" element={<AdminPage auth={auth} onNotify={notify} />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           {/* Addresses from the old layout, kept so shared links still land somewhere. */}
           <Route path="/hub" element={<Navigate to="/" replace />} />
@@ -313,11 +307,12 @@ function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onCl
 /** The account row at the bottom of the sidebar; it opens a small menu upwards with settings and sign in/out. */
 function AccountMenu({ auth, onSettings, onNotify }: { auth: AuthState; onSettings: () => void; onNotify: Notify }) {
   const [open, setOpen] = useState(false);
+  const [learnOpen, setLearnOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const handleAuth = useAuthAction(auth, onNotify);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setLearnOpen(false); return; }
     const onPointer = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
     document.addEventListener("pointerdown", onPointer);
@@ -331,6 +326,18 @@ function AccountMenu({ auth, onSettings, onNotify }: { auth: AuthState; onSettin
       {open ? (
         <div className="account-menu" role="menu" aria-label="계정 메뉴">
           <button type="button" role="menuitem" onClick={() => { setOpen(false); onSettings(); }}><GearIcon />설정</button>
+          {/* A mouse opens the submenu by hovering; touch and keyboard toggle it with a press. */}
+          <div className="account-learn" onPointerEnter={(event) => { if (event.pointerType === "mouse") setLearnOpen(true); }} onPointerLeave={(event) => { if (event.pointerType === "mouse") setLearnOpen(false); }}>
+            <button className={learnOpen ? "is-active" : undefined} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={learnOpen} onClick={() => setLearnOpen((value) => !value)}><InfoIcon />더 알아보기<span className="account-menu-chevron"><ChevronRightIcon /></span></button>
+            {learnOpen ? (
+              <div className="account-flyout">
+                <div className="account-submenu" role="menu" aria-label="더 알아보기">
+                  <a role="menuitem" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer" onClick={() => setOpen(false)}>YouTube 채널<span aria-hidden="true">↗</span></a>
+                  <Link role="menuitem" to="/privacy" onClick={() => setOpen(false)}>개인정보처리방침</Link>
+                </div>
+              </div>
+            ) : null}
+          </div>
           <span className="account-menu-rule" aria-hidden="true" />
           <button type="button" role="menuitem" onClick={() => { setOpen(false); void handleAuth(); }} disabled={auth.loading}>
             {auth.user ? <><LogoutIcon />로그아웃</> : <><LoginIcon />Google로 로그인</>}
@@ -364,7 +371,7 @@ function Sidebar({ auth, games, recent, open, onClose, onSettings, onNotify }: {
           <NavLink to="/" end className={sideLink}><HomeIcon />홈</NavLink>
           <NavLink to="/community" className={sideLink}><ChatIcon />커뮤니티</NavLink>
           <NavLink to="/about" className={sideLink}><InfoIcon />Atelier 소개</NavLink>
-          {auth.isAdmin ? <NavLink to="/admin" className={sideLink}><UploadIcon />업로드 룸</NavLink> : null}
+          {auth.isAdmin ? <NavLink to="/admin" className={sideLink}><SlidersIcon />관리</NavLink> : null}
         </div>
         {recentGames.length ? (
           <div className="side-group">
@@ -382,10 +389,6 @@ function Sidebar({ auth, games, recent, open, onClose, onSettings, onNotify }: {
       </div>
       <div className="sidebar-foot">
         <AccountMenu auth={auth} onSettings={onSettings} onNotify={onNotify} />
-        <div className="sidebar-links">
-          <a href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">YouTube ↗</a>
-          <Link to="/privacy">개인정보처리방침</Link>
-        </div>
       </div>
     </nav>
   );
@@ -1032,72 +1035,11 @@ function AboutPage() {
 
 /* ---------- Admin ---------- */
 
-function AdminPage({ auth, games, onNotify }: { auth: AuthState; games: Game[]; onNotify: Notify }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [genres, setGenres] = useState("");
-  const [accessLevel, setAccessLevel] = useState<AccessLevel>("public");
-  const [allowedEmails, setAllowedEmails] = useState("");
-  const [cover, setCover] = useState<File | null>(null);
-  const [build, setBuild] = useState<File | null>(null);
-  const [existing, setExisting] = useState<Game | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!title.trim()) return setExisting(null);
-    const timer = window.setTimeout(() => {
-      findGameByTitle(normalizeTitle(title)).then(setExisting).catch(() => setExisting(null));
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [title]);
-
+function AdminPage({ auth, onNotify }: { auth: AuthState; onNotify: Notify }) {
   if (auth.loading) return <LoadingState />;
-  if (!auth.user) return <PermissionPanel title="관리자 전용" text="업로드 룸은 Google 로그인 후 이용할 수 있습니다." />;
+  if (!auth.user) return <PermissionPanel title="관리자 전용" text="관리 화면은 Google 로그인 후 이용할 수 있습니다." />;
   if (!auth.isAdmin) return <PermissionPanel title="권한이 없어요" text="이 Google 계정에는 Atelier 관리자 권한이 없습니다." />;
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!title.trim()) return onNotify("게임 제목을 입력해 주세요.");
-    if (!cover) return onNotify("대표 이미지를 선택해 주세요.");
-    if (!build) return onNotify("웹빌드 ZIP 파일을 선택해 주세요.");
-    const buildError = validateBuild(build);
-    if (buildError) return onNotify(buildError);
-    const invitees = parseEmailList(allowedEmails);
-    if (accessLevel === "private" && invitees.invalid.length) return onNotify(`이메일 형식을 확인해 주세요: ${invitees.invalid.join(", ")}`);
-    if (cover) {
-      const coverError = validateImage(cover);
-      if (coverError) return onNotify(coverError);
-    }
-    setSaving(true);
-    setProgress(0);
-    setStatus(existing ? "기존 게임을 새 빌드로 업데이트하는 중…" : "업로드 준비 중…");
-    try {
-      const draft = await createOrUpdateGameDraft({ title: title.trim(), description: description.trim(), genres: genres.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 8), accessLevel, allowedEmails: accessLevel === "private" ? invitees.emails : undefined, existingGameId: existing?.id });
-      if (cover) {
-        setStatus("대표 이미지 업로드 중…");
-        await uploadFile(draft.coverPath, cover, (value) => setProgress(Math.round(value * 20)));
-      }
-      setStatus("웹빌드 ZIP 업로드 중…");
-      await uploadFile(draft.buildPath, build, (value) => setProgress(20 + Math.round(value * 80)));
-      setProgress(100);
-      setStatus("업로드 완료. 서버에서 ZIP을 검사하고 압축을 해제합니다.");
-      setTitle(""); setDescription(""); setGenres(""); setCover(null); setBuild(null); setExisting(null);
-      const coverInput = document.getElementById("game-cover") as HTMLInputElement | null;
-      const buildInput = document.getElementById("game-build") as HTMLInputElement | null;
-      if (coverInput) coverInput.value = "";
-      if (buildInput) buildInput.value = "";
-      onNotify("게임 업로드를 시작했습니다. 처리 완료 후 홈에 공개됩니다.");
-    } catch (error) {
-      setStatus("");
-      onNotify(error instanceof Error ? error.message : "업로드에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return <div className="admin-page page-container"><section className="page-heading"><div><p className="eyebrow">STUDIO CONTROL / PRIVATE</p><h1>업로드 룸</h1></div><p className="heading-note">새로운 작업물을 작업실에 들여놓습니다.</p></section><div className="admin-layout"><form className="upload-form" onSubmit={submit}><div className="form-section"><span className="form-number">01</span><div className="field-group"><label htmlFor="game-title">Game title</label><input id="game-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="예: Ember Archive" maxLength={80} /><span className="field-hint">동일한 제목의 게임은 기존 항목 수정 여부를 안내합니다.</span>{existing ? <div className="duplicate-alert"><strong>Existing game found</strong><p><b>{existing.title}</b>의 새 빌드로 업데이트합니다. 좋아요와 댓글은 유지됩니다.</p></div> : null}</div></div><div className="form-section"><span className="form-number">02</span><div className="field-group"><label htmlFor="game-description">Description</label><textarea id="game-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={"게임 소개와 조작법\n예: 조작: 방향키로 이동"} maxLength={500} /><span className="field-hint">줄바꿈이 그대로 보입니다. 조작법은 여기에 적어 주세요.</span><label htmlFor="game-genres">Genre tags</label><input id="game-genres" value={genres} onChange={(event) => setGenres(event.target.value)} placeholder="Adventure, Puzzle, Cozy" /><span className="field-hint">쉼표로 구분해 최대 8개까지 입력합니다. 홈의 장르 태그 검색에 쓰입니다.</span></div></div><div className="form-section"><span className="form-number">03</span><div className="field-group"><label htmlFor="game-access">Access level</label><select id="game-access" value={accessLevel} onChange={(event) => setAccessLevel(event.target.value as typeof accessLevel)}><option value="public">Public — everyone</option><option value="login">Demo — Google login</option><option value="subscriber">Prototype — YouTube subscriber (주간 무료 로테이션 대상)</option><option value="member">Early access — channel member</option><option value="private">Private — invited emails only</option></select>{accessLevel === "private" ? <><label htmlFor="game-allowed-emails">Invited emails</label><textarea id="game-allowed-emails" value={allowedEmails} onChange={(event) => setAllowedEmails(event.target.value)} placeholder={"friend@gmail.com\ntester@example.com"} /><span className="field-hint">쉼표나 줄바꿈으로 구분합니다. 이 Google 계정으로 로그인한 사람(과 관리자)에게만 보입니다.</span></> : null}</div></div><div className="form-section"><span className="form-number">04</span><div className="field-group"><label htmlFor="game-cover">Cover image</label><label className="drop-field" htmlFor="game-cover"><span>{cover ? cover.name : "Choose JPG, PNG, or WebP"}</span><small>MAX 5MB</small><input id="game-cover" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setCover(event.target.files?.[0] ?? null)} /></label></div></div><div className="form-section"><span className="form-number">05</span><div className="field-group"><label htmlFor="game-build">Web build ZIP</label><label className="drop-field build-field" htmlFor="game-build"><span>{build ? build.name : "Choose your playable build"}</span><small>MAX {Math.round(MAX_BUILD_BYTES / 1024 / 1024)}MiB · ROOT INDEX.HTML</small><input id="game-build" type="file" accept=".zip,application/zip" onChange={(event) => setBuild(event.target.files?.[0] ?? null)} /></label></div></div><button className="button button-primary submit-upload" type="submit" disabled={saving}>{saving ? `Uploading ${progress}%` : existing ? "Update game build →" : "Publish to Atelier →"}</button>{status ? <p className="upload-status"><span className={progress === 100 ? "live-dot" : "spinner-dot"} />{status}</p> : null}</form><aside className="admin-aside"><div className="aside-note"><span className="eyebrow">UPLOAD CHECKLIST</span><ol><li>index.html은 ZIP 루트에 있어야 합니다.</li><li>상대 경로로 연결된 웹빌드만 지원합니다.</li><li>압축 해제 후 검사에 통과한 빌드만 공개됩니다.</li></ol></div><div className="aside-list"><span className="eyebrow">CURRENT CATALOGUE</span>{games.slice(0, 6).map((game) => <div className="mini-game" key={game.id}><span>{game.title}</span><small>{accessLabel(game.accessLevel)}</small></div>)}</div></aside></div><AdminTools onNotify={onNotify} /></div>;
+  return <ManagePage onNotify={onNotify} />;
 }
 
 function PermissionPanel({ title, text }: { title: string; text: string }) { return <div className="center-state"><span className="state-symbol">✳</span><h1>{title}</h1><p>{text}</p><Link className="button button-primary" to="/">홈으로</Link></div>; }
@@ -1116,7 +1058,7 @@ function CloseIcon() { return <Icon size={16}><path d="M4.5 4.5l9 9M13.5 4.5l-9 
 function HomeIcon() { return <Icon><path d="M3 8.5L9 3.5l6 5V15H3z" /></Icon>; }
 function ChatIcon() { return <Icon><path d="M3 4.5h12v8H8l-3.5 2.5v-2.5H3z" /></Icon>; }
 function InfoIcon() { return <Icon><circle cx="9" cy="9" r="6.5" /><path d="M9 8.2v4.3M9 5.6v.1" /></Icon>; }
-function UploadIcon() { return <Icon><path d="M9 12V3.5M5.5 7L9 3.5 12.5 7M3.5 12.5v2h11v-2" /></Icon>; }
+function SlidersIcon() { return <Icon><path d="M3 5h7M13 5h2M3 13h2M8 13h7" /><circle cx="11.5" cy="5" r="1.5" /><circle cx="6.5" cy="13" r="1.5" /></Icon>; }
 function PersonIcon() { return <Icon size={16}><circle cx="9" cy="6.5" r="3" /><path d="M3 16c.8-3 3.2-4.5 6-4.5s5.2 1.5 6 4.5" /></Icon>; }
 function SearchIcon() { return <Icon><circle cx="8" cy="8" r="5" /><path d="M12 12l3.5 3.5" /></Icon>; }
 function SendIcon() { return <Icon size={16}><path d="M9 14.5V4M4.5 8.5L9 4l4.5 4.5" /></Icon>; }
@@ -1124,9 +1066,10 @@ function ImageIcon() { return <Icon><rect x="2.5" y="3.5" width="13" height="11"
 function GamepadIcon() { return <Icon><rect x="2" y="5" width="14" height="8.5" rx="4.25" /><path d="M6 7.5v3.5M4.25 9.25h3.5" /><path d="M12 8.3v.1M13.3 10.3v.1" /></Icon>; }
 function CheckIcon() { return <Icon size={16}><path d="M3.5 9.5l3.5 3.5 7.5-8" /></Icon>; }
 function FullscreenIcon() { return <Icon size={16}><path d="M2.5 6.5v-4h4M11.5 2.5h4v4M15.5 11.5v4h-4M6.5 15.5h-4v-4" /></Icon>; }
-function GearIcon() { return <Icon size={17}><circle cx="9" cy="9" r="2.4" /><path d="M9 1.8v2M9 14.2v2M1.8 9h2M14.2 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4" /></Icon>; }
+function GearIcon() { return <Icon size={17}><path d="M7.6 2h2.8l.4 2 1.4.8 1.9-.7 1.4 2.4-1.5 1.3v1.6l1.5 1.3-1.4 2.4-1.9-.7-1.4.8-.4 2H7.6l-.4-2-1.4-.8-1.9.7-1.4-2.4 1.5-1.3V8.2L2.5 6.9l1.4-2.4 1.9.7 1.4-.8z" /><circle cx="9" cy="9" r="2.3" /></Icon>; }
 function LogoutIcon() { return <Icon size={17}><path d="M7 15H3.5V3H7M11.5 12.5L15 9l-3.5-3.5M15 9H7" /></Icon>; }
 function LoginIcon() { return <Icon size={17}><path d="M11 3h3.5v12H11M6.5 5.5L10 9l-3.5 3.5M10 9H2.5" /></Icon>; }
+function ChevronRightIcon() { return <Icon size={14}><path d="M7 4.5L11.5 9 7 13.5" /></Icon>; }
 function ChevronUpIcon() { return <Icon size={14}><path d="M4.5 11L9 6.5l4.5 4.5" /></Icon>; }
 function MonitorIcon() { return <Icon size={15}><rect x="2.5" y="3" width="13" height="9" rx="1.5" /><path d="M6.5 15h5M9 12v3" /></Icon>; }
 function SunIcon() { return <Icon size={15}><circle cx="9" cy="9" r="3" /><path d="M9 2v1.5M9 14.5V16M2 9h1.5M14.5 9H16M4 4l1 1M13 13l1 1M4 14l1-1M13 5l1-1" /></Icon>; }
