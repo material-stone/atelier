@@ -1,0 +1,2 @@
+# The CLI is published to npm from Windows checkouts too; a CRLF shebang breaks it on macOS and Linux.
+tools/atelier-cli/** text eol=lf

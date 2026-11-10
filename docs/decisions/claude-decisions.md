@@ -2,6 +2,21 @@
 
 Claude가 구현하면서 정한 설계와 그 이유입니다. 사용자가 정한 방향은 [user-decisions.md](user-decisions.md)에 있습니다.
 
+## 2026-11-10 · CLI 줄바꿈 고정과 배포 설정 정리
+
+### tools/atelier-cli의 줄바꿈을 .gitattributes로 LF 고정
+
+- **결정:** `tools/atelier-cli/** text eol=lf`. 저장소 전체가 아니라 이 폴더만 정한다.
+- **이유:** Windows 체크아웃(`core.autocrlf=true`)에서는 `cli.mjs`가 CRLF가 되어, 그대로 npm에 올리면 macOS·Linux에서 `#!/usr/bin/env node`를 찾지 못해 실행되지 않는다. 첫 게시 때는 손으로 LF로 바꿔 올렸다. 저장소 전체 규칙은 다른 파일의 줄바꿈까지 바꿔 큰 diff가 생기므로, 문제가 실제로 생기는 곳만 고정했다.
+
+### functions/.env.example에 SITE_URL을 넣는다
+
+- **이유:** 코드에 기본값이 있어도 `firebase deploy --non-interactive`는 `.env`에 값이 없는 파라미터를 거부했다. 첫 배포가 이 때문에 실패했다.
+
+### npm 게시는 --auth-type=web과 보안 키로
+
+- **이유:** npm은 게시에 2단계 인증을 요구하고, 새 설정에서는 보안 키만 고를 수 있어 `--otp` 코드가 없다. 브라우저 인증 링크에서 보안 키로 승인하는 방식이 동작했다. 이 절차와 "`tools/atelier-cli`에서 실행" 주의를 문서에 남겼다(한 번 저장소 루트에서 실행돼 거부된 적이 있다).
+
 ## 2026-11-10 · atelier-cli 이름과 하위 명령, npm 배포
 
 ### npm 패키지 이름은 @material-stone/atelier-cli
