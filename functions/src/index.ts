@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { FieldValue, Timestamp, getFirestore, type DocumentData, type DocumentSnapshot, type QuerySnapshot } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore, type DocumentData, type DocumentReference, type DocumentSnapshot, type QuerySnapshot } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { onObjectFinalized } from "firebase-functions/v2/storage";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -11,6 +11,7 @@ import { logger } from "firebase-functions";
 import mime from "mime-types";
 import unzipper from "unzipper";
 import { type AccessLevel, isAccessLevel, normalizeEmailList, weeklyRotationIds } from "./access.js";
+import { apiKeyMatches, bearerToken } from "./apiKey.js";
 import { DIRECT_ASSET_CACHE_CONTROL, isDirectAsset, signedUrlWindow } from "./delivery.js";
 import { monthKeyBefore, pageMonthKey } from "./month.js";
 
@@ -24,6 +25,8 @@ const YOUTUBE_CHANNEL_ID = defineString("YOUTUBE_CHANNEL_ID", { default: "" });
 const PAGES_ORIGIN = defineString("PAGES_ORIGIN", { default: "https://material-stone-games.github.io" });
 const FUNCTIONS_BASE_URL = defineString("FUNCTIONS_BASE_URL", { default: "" });
 const PLAY_SESSION_SECRET = defineSecret("PLAY_SESSION_SECRET");
+// Admin key for the upload API (scripts and Claude upload without a browser). Rotate with functions:secrets:set.
+const UPLOAD_API_KEY = defineSecret("UPLOAD_API_KEY");
 
 const MAX_ZIP_BYTES = 250 * 1024 * 1024;
 const MAX_EXTRACTED_BYTES = 1024 * 1024 * 1024;
@@ -198,49 +201,260 @@ export const verifyYoutubeSubscription = onCall({ region: "asia-northeast3", enf
   return { verifiedUntil: verifiedUntil.toDate().toISOString() };
 });
 
-export const createOrUpdateGameDraft = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 2 }, async (request) => {
-  const auth = requireAdmin(request);
-  const data = (request.data ?? {}) as Record<string, unknown>;
-  const meta = readGameMeta(data);
-  const allowedEmails = readAllowedEmails(data, meta.accessLevel);
+/**
+ * Game info changes sent with an update of a published game, held until its build publishes.
+ * Kept apart from games/{id} because that document is public and may carry invitee emails.
+ * The collection has no client rules, so only Functions can read it.
+ */
+function pendingUpdateRef(versionId: string) {
+  return db.doc(`pendingGameUpdates/${versionId}`);
+}
 
-  let gameRef = data.existingGameId ? db.doc(`games/${String(data.existingGameId)}`) : null;
-  let existing = gameRef ? await gameRef.get() : null;
-  if (!gameRef || !existing?.exists) {
-    const match = await db.collection("games").where("titleKey", "==", meta.titleKey).limit(1).get();
-    if (!match.empty) {
-      const matched = match.docs[0];
-      if (matched) {
-        gameRef = matched.ref;
-        existing = matched;
-      }
-    }
+/** Applies held game info for a just-published update, in the same order as a direct edit. */
+async function publishUpdate(gameRef: DocumentReference<DocumentData>,versionId: string, buildFields: Record<string, unknown>): Promise<void> {
+  const pending = await pendingUpdateRef(versionId).get();
+  const meta = pending.exists ? (pending.get("meta") as Record<string, unknown>) : null;
+  const allowedEmails = pending.exists ? (pending.get("allowedEmails") as string[] | null) : null;
+  // Write the allowlist before the game turns private, and drop it only after the game has left private.
+  if (meta && allowedEmails) await saveAllowlist(gameRef.id, allowedEmails);
+  await gameRef.update({ ...(meta ?? {}), ...buildFields });
+  if (meta && !allowedEmails) await saveAllowlist(gameRef.id, null);
+  if (pending.exists) await pending.ref.delete();
+}
+
+/** The game a draft targets:the given id when it exists, otherwise the game with the same title. */
+async function findDraftTarget(existingGameId: unknown, titleKey: string | null): Promise<DocumentSnapshot<DocumentData> | null> {
+  if (typeof existingGameId === "string" && existingGameId) {
+    const snapshot = await db.doc(`games/${existingGameId}`).get();
+    if (snapshot.exists) return snapshot;
   }
-  if (!gameRef) gameRef = db.collection("games").doc();
+  if (!titleKey) return null;
+  const match = await db.collection("games").where("titleKey", "==", titleKey).limit(1).get();
+  return match.docs[0] ?? null;
+}
 
+/**
+ * Points a game at a new build version and returns where its ZIP and cover go.
+ * Shared by the web upload room and the upload API; processBuildZip takes it from there.
+ * `uploader` only namespaces the incoming path, the processor ignores it.
+ */
+async function prepareGameDraft(
+  meta: ReturnType<typeof readGameMeta>,
+  allowedEmails: string[] | null,
+  existing: DocumentSnapshot<DocumentData> | null,
+  uploader: string,
+) {
+  const gameRef = existing?.ref ?? db.collection("games").doc();
   const versionId = randomUUID();
   const gameId = gameRef.id;
-  const buildPath = `incoming-builds/${auth.uid}/${gameId}/${versionId}.zip`;
+  const buildPath = `incoming-builds/${uploader}/${gameId}/${versionId}.zip`;
   const coverPath = `game-covers/${gameId}/cover`;
-  const payload: Record<string, unknown> = { ...meta, coverPath, buildError: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() };
   if (existing?.exists && existing.get("buildStatus") === "published") {
-    // Keep the current build playable until the new one is processed.
-    payload.pendingVersionId = versionId;
-  } else {
-    payload.buildVersionId = versionId;
-    payload.buildStatus = "processing";
-    payload.buildRoot = `game-builds/${gameId}/${versionId}`;
-    payload.pendingVersionId = FieldValue.delete();
+    // Keep the current build and its title, description and access playable as they are until the
+    // new build publishes; processBuildZip applies the held changes then, and drops them on failure.
+    const previous = existing.get("pendingVersionId");
+    if (typeof previous === "string") await pendingUpdateRef(previous).delete();
+    await pendingUpdateRef(versionId).set({ gameId, meta, allowedEmails, createdAt: FieldValue.serverTimestamp() });
+    await gameRef.update({ pendingVersionId: versionId, coverPath, buildError: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
+    return { gameId, versionId, buildPath, coverPath, created: false };
   }
+  const payload: Record<string, unknown> = { ...meta, coverPath, buildError: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() };
+  // Not public yet, so the new title and description can show right away.
+  payload.buildVersionId = versionId;
+  payload.buildStatus = "processing";
+  payload.buildRoot = `game-builds/${gameId}/${versionId}`;
+  payload.pendingVersionId = FieldValue.delete();
   if (!existing?.exists) {
     payload.createdAt = FieldValue.serverTimestamp();
     payload.likeCount = 0;
+    // Lets a cancelled first upload remove the game it created, and nothing older.
+    payload.createdByVersionId = versionId;
   }
   // Write the allowlist first so a game never turns private before its invitees are on file.
   if (allowedEmails) await saveAllowlist(gameId, allowedEmails);
   await gameRef.set(payload, { merge: true });
   if (!allowedEmails) await saveAllowlist(gameId, null);
+  return { gameId, versionId, buildPath, coverPath, created: !existing?.exists };
+}
+
+export const createOrUpdateGameDraft = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 2 }, async (request) => {
+  const auth = requireAdmin(request);
+  const data = (request.data ?? {}) as Record<string, unknown>;
+  const meta = readGameMeta(data);
+  const allowedEmails = readAllowedEmails(data, meta.accessLevel);
+  const existing = await findDraftTarget(data.existingGameId, meta.titleKey);
+  const { gameId, buildPath, coverPath } = await prepareGameDraft(meta, allowedEmails, existing, auth.uid);
   return { gameId, buildPath, coverPath };
+});
+
+// ---- Upload API: the same pipeline as the upload room, reached with an API key instead of a browser. ----
+
+const MAX_COVER_BYTES = 5 * 1024 * 1024;
+const COVER_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+class ApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
+
+function readFileSpec(value: unknown, label: string, maxBytes: number): { size: number; contentType: string } | null {
+  if (value === undefined || value === null) return null;
+  const spec = value as { size?: unknown; contentType?: unknown };
+  const size = Number(spec.size);
+  const contentType = typeof spec.contentType === "string" ? spec.contentType : "";
+  if (!Number.isInteger(size) || size <= 0) throw new ApiError(400, `${label} 크기를 확인해 주세요.`);
+  if (size > maxBytes) throw new ApiError(413, `${label}은(는) ${Math.floor(maxBytes / 1024 / 1024)}MiB 이하만 올릴 수 있습니다.`);
+  return { size, contentType };
+}
+
+/**
+ * Fills fields the caller left out from the existing game, so a build-only update keeps
+ * the title, description, genres, access level and invitees exactly as they are.
+ */
+async function mergedGameInput(body: Record<string, unknown>, existing: DocumentSnapshot<DocumentData> | null): Promise<Record<string, unknown>> {
+  if (!existing?.exists) return body;
+  const merged: Record<string, unknown> = {
+    title: existing.get("title"),
+    description: existing.get("description") ?? "",
+    genres: existing.get("genres") ?? [],
+    accessLevel: existing.get("accessLevel"),
+  };
+  for (const key of ["title", "description", "genres", "accessLevel", "allowedEmails"]) {
+    if (body[key] !== undefined) merged[key] = body[key];
+  }
+  if (merged.allowedEmails === undefined && merged.accessLevel === "private") {
+    merged.allowedEmails = (await allowlistRef(existing.id).get()).get("emails") ?? [];
+  }
+  return merged;
+}
+
+/** A resumable upload session URI: the client can PUT the file straight to Cloud Storage, in chunks, without credentials. */
+async function uploadSession(path: string, contentType: string): Promise<string> {
+  const metadata: Record<string, unknown> = { contentType };
+  // Firebase download URLs (used for covers) need a token on the object.
+  if (path.startsWith("game-covers/")) metadata.metadata = { firebaseStorageDownloadTokens: randomUUID() };
+  const [uri] = await bucket.file(path).createResumableUpload({ metadata });
+  return uri;
+}
+
+async function createApiDraft(body: Record<string, unknown>) {
+  const build = readFileSpec(body.build, "ZIP", MAX_ZIP_BYTES);
+  if (!build) throw new ApiError(400, "build.size가 필요합니다.");
+  const cover = readFileSpec(body.cover, "대표 이미지", MAX_COVER_BYTES);
+  if (cover && !COVER_TYPES.has(cover.contentType)) throw new ApiError(400, "대표 이미지는 JPG, PNG, WebP만 올릴 수 있습니다.");
+
+  const gameId = typeof body.gameId === "string" ? body.gameId : "";
+  const titleKey = typeof body.title === "string" ? normalizeTitle(body.title) : null;
+  const existing = await findDraftTarget(gameId, titleKey);
+  if (gameId && !existing) throw new ApiError(404, "게임을 찾을 수 없습니다.");
+  if (!existing && !cover) throw new ApiError(400, "새 게임은 대표 이미지가 필요합니다.");
+
+  let meta: ReturnType<typeof readGameMeta>;
+  let allowedEmails: string[] | null;
+  try {
+    const input = await mergedGameInput(body, existing);
+    meta = readGameMeta(input);
+    allowedEmails = readAllowedEmails(input, meta.accessLevel);
+  } catch (error) {
+    throw new ApiError(400, error instanceof Error ? error.message : "게임 정보를 확인해 주세요.");
+  }
+  if (existing) {
+    const duplicate = await db.collection("games").where("titleKey", "==", meta.titleKey).limit(2).get();
+    if (duplicate.docs.some((doc) => doc.id !== existing.id)) throw new ApiError(409, "같은 제목의 게임이 이미 있습니다.");
+  }
+
+  const draft = await prepareGameDraft(meta, allowedEmails, existing, "upload-api");
+  return {
+    gameId: draft.gameId,
+    versionId: draft.versionId,
+    created: draft.created,
+    title: meta.title,
+    buildUploadUrl: await uploadSession(draft.buildPath, "application/zip"),
+    coverUploadUrl: cover ? await uploadSession(draft.coverPath, cover.contentType) : null,
+  };
+}
+
+/**
+ * Undoes a draft whose ZIP never finished uploading, so an interrupted upload leaves no
+ * game stuck in "processing". A version that already published or moved on is left alone.
+ */
+async function cancelApiDraft(gameId: string, versionId: string): Promise<{ result: "update-cancelled" | "game-deleted" | "marked-failed" | "not-pending" }> {
+  const gameRef = db.doc(`games/${gameId}`);
+  const game = await gameRef.get();
+  if (!game.exists) return { result: "not-pending" };
+  await bucket.file(`incoming-builds/upload-api/${gameId}/${versionId}.zip`).delete({ ignoreNotFound: true });
+  if (game.get("pendingVersionId") === versionId) {
+    // The previous build and game info are still live; only the pending marker and held changes go.
+    await pendingUpdateRef(versionId).delete();
+    await gameRef.update({ pendingVersionId: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
+    return { result: "update-cancelled" };
+  }
+  if (game.get("buildVersionId") !== versionId || game.get("buildStatus") !== "processing") return { result: "not-pending" };
+  if (game.get("createdByVersionId") === versionId) {
+    // Never published, so nobody could have liked or commented on it.
+    await bucket.file(`game-covers/${gameId}/cover`).delete({ ignoreNotFound: true });
+    await saveAllowlist(gameId, null);
+    await gameRef.delete();
+    return { result: "game-deleted" };
+  }
+  await gameRef.update({ buildStatus: "failed", buildError: "업로드가 취소되었습니다.", updatedAt: FieldValue.serverTimestamp() });
+  return { result: "marked-failed" };
+}
+
+async function apiGameStatus(gameId: string) {
+  const game = await db.doc(`games/${gameId}`).get();
+  if (!game.exists) throw new ApiError(404, "게임을 찾을 수 없습니다.");
+  return {
+    gameId,
+    title: game.get("title") ?? "",
+    accessLevel: game.get("accessLevel") ?? null,
+    buildStatus: game.get("buildStatus") ?? null,
+    buildVersionId: game.get("buildVersionId") ?? null,
+    pendingVersionId: game.get("pendingVersionId") ?? null,
+    buildError: game.get("buildError") ?? null,
+  };
+}
+
+/**
+ * POST /games       — create a game or point an existing one at a new build; returns upload URLs.
+ * GET  /games/{id}  — build status, for polling until processBuildZip finishes.
+ * DELETE /games/{id}/versions/{versionId} — cancel a draft whose ZIP never finished uploading.
+ * Auth: `Authorization: Bearer <UPLOAD_API_KEY>`. The key acts as the admin, so keep it off the client.
+ */
+export const uploadApi = onRequest({ region: "asia-northeast3", maxInstances: 1, secrets: [UPLOAD_API_KEY] }, async (request, response) => {
+  response.set("Cache-Control", "no-store");
+  try {
+    if (!apiKeyMatches(bearerToken(request.get("authorization")), UPLOAD_API_KEY.value())) throw new ApiError(401, "API 키가 올바르지 않습니다.");
+    const path = request.path.replace(/\/+$/, "");
+    if (request.method === "POST" && path === "/games") {
+      const body = request.body && typeof request.body === "object" ? (request.body as Record<string, unknown>) : {};
+      const result = await createApiDraft(body);
+      logger.info("Upload API draft", { gameId: result.gameId, versionId: result.versionId, created: result.created });
+      response.status(result.created ? 201 : 200).json(result);
+      return;
+    }
+    const statusMatch = path.match(/^\/games\/([A-Za-z0-9_-]{1,64})$/);
+    if (request.method === "GET" && statusMatch?.[1]) {
+      response.json(await apiGameStatus(statusMatch[1]));
+      return;
+    }
+    const cancelMatch = path.match(/^\/games\/([A-Za-z0-9_-]{1,64})\/versions\/([0-9a-f-]{36})$/);
+    if (request.method === "DELETE" && cancelMatch?.[1] && cancelMatch[2]) {
+      const result = await cancelApiDraft(cancelMatch[1], cancelMatch[2]);
+      logger.info("Upload API cancel", { gameId: cancelMatch[1], versionId: cancelMatch[2], ...result });
+      response.json(result);
+      return;
+    }
+    throw new ApiError(404, "지원하지 않는 경로입니다.");
+  } catch (error) {
+    if (error instanceof ApiError) {
+      response.status(error.status).json({ error: error.message });
+      return;
+    }
+    logger.error("Upload API failed", { error });
+    response.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
 });
 
 export const createPost = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 3 }, async (request) => {
@@ -508,6 +722,8 @@ export const processBuildZip = onObjectFinalized({ bucket: GAME_STORAGE_BUCKET, 
   const isUpdate = game.exists && game.get("pendingVersionId") === versionId;
   const isInitial = game.exists && game.get("buildVersionId") === versionId && game.get("buildStatus") !== "published";
   if (!isUpdate && !isInitial) {
+    // A superseded or cancelled upload: its held game info will never apply.
+    await pendingUpdateRef(versionId ?? "").delete().catch(() => undefined);
     await source.delete().catch(() => undefined);
     return;
   }
@@ -531,13 +747,16 @@ export const processBuildZip = onObjectFinalized({ bucket: GAME_STORAGE_BUCKET, 
       const { contentType, contentEncoding } = assetHeaders(path);
       await bucket.file(`${versionRoot}${path}`).save(content, { resumable: false, metadata: { contentType, contentEncoding, cacheControl: DIRECT_ASSET_CACHE_CONTROL } });
     }
-    await gameRef.update({ buildVersionId: versionId, buildStatus: "published", buildRoot: versionRoot.slice(0, -1), pendingVersionId: FieldValue.delete(), buildError: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
+    const buildFields = { buildVersionId: versionId, buildStatus: "published", buildRoot: versionRoot.slice(0, -1), pendingVersionId: FieldValue.delete(), buildError: FieldValue.delete(), createdByVersionId: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() };
+    if (isUpdate) await publishUpdate(gameRef, versionId ?? "", buildFields);
+    else await gameRef.update(buildFields);
     const removed = await deletePrefix(`game-builds/${gameId}/`, (name) => name.startsWith(versionRoot));
     logger.info("Published game build", { gameId, versionId, files: files.length, removedOldFiles: removed });
   } catch (error) {
     const message = error instanceof Error ? error.message : "ZIP processing failed";
     await deletePrefix(versionRoot);
-    // A failed update keeps the previous build published.
+    // A failed update keeps the previous build published, along with its game info.
+    if (isUpdate) await pendingUpdateRef(versionId ?? "").delete().catch(() => undefined);
     await gameRef.update(isUpdate
       ? { buildError: message, pendingVersionId: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }
       : { buildStatus: "failed", buildError: message, updatedAt: FieldValue.serverTimestamp() });
@@ -583,6 +802,7 @@ export const deleteGame = onCall({ region: "asia-northeast3", enforceAppCheck: t
   await Promise.all(incoming.filter((file) => file.name.split("/")[2] === gameId).map((file) => file.delete().catch(() => undefined)));
   await deleteDocs(await db.collection("comments").where("targetType", "==", "game").where("targetId", "==", gameId).get());
   await deleteDocs(await db.collection("likeRecords").where("targetType", "==", "game").where("targetId", "==", gameId).get());
+  await deleteDocs(await db.collection("pendingGameUpdates").where("gameId", "==", gameId).get());
   await gameRef.delete();
   await allowlistRef(gameId).delete();
   await db.doc(`gameStats/${gameId}`).delete();
