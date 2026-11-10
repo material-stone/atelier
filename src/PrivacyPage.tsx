@@ -13,7 +13,7 @@ export function PrivacyPage() {
       </header>
 
       <article className="privacy-body">
-        <p>Material Stone Games(이하 "운영자")는 Atelier(material-stone-games.github.io/atelier)를 운영하면서 아래와 같이 개인정보를 처리합니다.</p>
+        <p>Material Stone Games(이하 "운영자")는 Atelier(material-stone.github.io/atelier)를 운영하면서 아래와 같이 개인정보를 처리합니다.</p>
 
         <h2>1. 수집하는 정보</h2>
         <ul>

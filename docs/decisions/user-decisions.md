@@ -2,6 +2,13 @@
 
 사용자가 정한 방향과 요구사항, 그 이유입니다. Claude의 설계 판단은 [claude-decisions.md](claude-decisions.md)에 있습니다.
 
+## 2026-11-10 · atelier 저장소를 material-stone 조직으로 이전
+
+### GitHub 조직 이름은 material-stone, atelier를 그리로 옮긴다
+
+- **결정:** 개인 소유 조직 `MaterialStone`의 이름을 `material-stone`으로 바꾸고(Claude 추천), 그 안의 `spell-agent`, `ark-zero`는 개인 계정 YouHyunwoo로 옮겼다. `material-stone-games`에서 Pages를 쓰는 저장소 넷 중 atelier만 먼저 `material-stone`으로 옮긴다.
+- **이유:** 앞으로 쓸 조직으로 정리한다. 나머지(PokeDetective, 개인정보처리방침 페이지 둘)는 나중에 정한다.
+
 ## 2026-11-10 · CLI 줄바꿈 고정과 배포 설정 정리
 
 ### 배포에서 드러난 문제를 저장소에 반영한다

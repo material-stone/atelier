@@ -1,6 +1,6 @@
 # atelier-cli
 
-[Atelier](https://material-stone-games.github.io/atelier/)에 웹빌드 게임을 브라우저 없이 올리는 명령줄 도구입니다. Atelier 관리자 계정이 있어야 쓸 수 있습니다.
+[Atelier](https://material-stone.github.io/atelier/)에 웹빌드 게임을 브라우저 없이 올리는 명령줄 도구입니다. Atelier 관리자 계정이 있어야 쓸 수 있습니다.
 
 ## 설치
 
@@ -37,4 +37,4 @@ atelier-cli status <gameId>
 
 ZIP은 루트(또는 하나뿐인 최상위 폴더)에 `index.html`이 있어야 하고 250MiB 이하여야 합니다. 연결이 끊기면 같은 명령을 다시 실행해 이어서 올리고, 그만두려면 같은 명령에 `--cancel`을 붙입니다.
 
-전체 옵션은 `atelier-cli help`, 자세한 설명은 [업로드 API 문서](https://github.com/material-stone-games/atelier/blob/main/docs/upload-api.md)에 있습니다.
+전체 옵션은 `atelier-cli help`, 자세한 설명은 [업로드 API 문서](https://github.com/material-stone/atelier/blob/main/docs/upload-api.md)에 있습니다.

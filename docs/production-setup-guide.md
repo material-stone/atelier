@@ -1,11 +1,11 @@
 # Atelier 운영 전 준비·배포·검수 가이드
 
-이 문서는 `material-stone-games/atelier`를 실제 운영하기 전에 필요한 계정 준비, Firebase 설정, 관리자 인증, GitHub Pages 배포, 출시 검수, 운영 업무를 정해진 순서로 수행하기 위한 가이드입니다.
+이 문서는 `material-stone/atelier`를 실제 운영하기 전에 필요한 계정 준비, Firebase 설정, 관리자 인증, GitHub Pages 배포, 출시 검수, 운영 업무를 정해진 순서로 수행하기 위한 가이드입니다.
 
 문서 기준 주소는 다음과 같습니다.
 
-- 저장소: <https://github.com/material-stone-games/atelier>
-- GitHub Pages: <https://material-stone-games.github.io/atelier/>
+- 저장소: <https://github.com/material-stone/atelier>
+- GitHub Pages: <https://material-stone.github.io/atelier/>
 - 홈(게임 검색): `/atelier/`
 - 게임 플레이: `/atelier/game/:gameId`
 - 커뮤니티: `/atelier/community`
@@ -31,8 +31,8 @@
 | YouTube 채널 ID | `UC...` 형식의 실제 채널 ID | Functions와 Pages 변수 |
 | YouTube 공개 URL | `https://www.youtube.com/@...` | 홈·프로토타입 안내 링크 |
 | Discord 초대 URL | 실제 초대 링크 | 홈·푸터 링크 |
-| Pages origin | `https://material-stone-games.github.io` | `PAGES_ORIGIN` |
-| Pages 전체 URL | `https://material-stone-games.github.io/atelier/` | 브라우저·OAuth·출시 검수 |
+| Pages origin | `https://material-stone.github.io` | `PAGES_ORIGIN` |
+| Pages 전체 URL | `https://material-stone.github.io/atelier/` | 브라우저·OAuth·출시 검수 |
 | Functions base URL | `https://asia-northeast3-YOUR_PROJECT_ID.cloudfunctions.net` | `FUNCTIONS_BASE_URL` |
 | 결제 계정 | Google Cloud Billing account | Firebase Blaze |
 | 예산 알림 수신자 | 운영 담당자 이메일 | Google Cloud Billing |
@@ -52,7 +52,7 @@
 
 ### 1.1 필요한 권한
 
-- GitHub 조직 `material-stone-games`의 `atelier` 저장소 관리자 또는 Actions/Pages 설정 권한
+- GitHub 조직 `material-stone`의 `atelier` 저장소 관리자 또는 Actions/Pages 설정 권한
 - Firebase 프로젝트를 생성하고 Billing을 연결할 수 있는 Google 계정
 - Google Cloud 프로젝트의 API와 OAuth 동의 화면을 설정할 권한
 - Material Stone YouTube 채널의 정확한 채널 ID를 확인할 수 있는 권한
@@ -158,7 +158,7 @@ Firestore와 Functions는 가능한 한 `asia-northeast3` 또는 사용자와 �
 3. 프로젝트의 지원 이메일을 지정합니다.
 4. Authorized domains에 다음을 확인·추가합니다.
 
-   - `material-stone-games.github.io`
+   - `material-stone.github.io`
    - 로컬 테스트용 `localhost`가 필요한지 확인
    - 별도 custom domain을 사용한다면 해당 host도 추가
 
@@ -214,7 +214,7 @@ firebase use --add
 
 ```dotenv
 YOUTUBE_CHANNEL_ID=UCxxxxxxxxxxxxxxxxxxxxxx
-PAGES_ORIGIN=https://material-stone-games.github.io
+PAGES_ORIGIN=https://material-stone.github.io
 FUNCTIONS_BASE_URL=https://asia-northeast3-YOUR_PROJECT_ID.cloudfunctions.net
 ```
 
@@ -456,7 +456,7 @@ git push origin main
 1. GitHub Actions에서 `Deploy Atelier to GitHub Pages` workflow를 엽니다.
 2. `Install dependencies`, `Build`, `Upload Pages artifact`, `Deploy to GitHub Pages`가 모두 성공하는지 확인합니다.
 3. 실패하면 workflow 로그에서 변수명, Node/npm 오류, Vite base path 오류를 먼저 확인합니다.
-4. Pages의 배포 URL이 `https://material-stone-games.github.io/atelier/`인지 확인합니다.
+4. Pages의 배포 URL이 `https://material-stone.github.io/atelier/`인지 확인합니다.
 5. Pages가 아직 이전 artifact를 보여주면 Actions의 배포 job과 Pages environment의 최신 deployment를 대조합니다.
 
 ## 9. 운영 전 기능 검수
@@ -685,7 +685,7 @@ git push origin main
 | 증상 | 먼저 확인할 것 | 조치 |
 | --- | --- | --- |
 | 화면에 데모 게임만 표시됨 | Firebase Web config가 비어 있는지 | `.env` 또는 GitHub Variables 6개 핵심 Firebase 값 확인 후 재빌드 |
-| Google 로그인에서 unauthorized domain | Firebase Auth Authorized domains | `material-stone-games.github.io`와 실제 접속 host 추가 |
+| Google 로그인에서 unauthorized domain | Firebase Auth Authorized domains | `material-stone.github.io`와 실제 접속 host 추가 |
 | 관리자 페이지가 거부됨 | Auth custom claim과 token 갱신 | 이메일 확인, `set-admin` 재실행, 로그아웃/재로그인 |
 | 구독 확인 실패 | YouTube API, OAuth scope, channel ID | API Enable, `UC...` ID 확인, test user/동의 화면 확인 |
 | 게임 목록이 비어 있음 | Firestore `games.buildStatus`, Rules/indexes | `published` 여부, Rules/indexes 배포, Functions 오류 확인 |

@@ -2,6 +2,23 @@
 
 Claude가 구현하면서 정한 설계와 그 이유입니다. 사용자가 정한 방향은 [user-decisions.md](user-decisions.md)에 있습니다.
 
+## 2026-11-10 · atelier 저장소를 material-stone 조직으로 이전
+
+### 주소를 새 조직 기준으로 바꾸고 옛 주소는 넘겨주는 페이지로 유지
+
+- **결정:** 코드·문서의 사이트 주소를 `material-stone.github.io/atelier`로, 저장소 주소를 `github.com/material-stone/atelier`로 바꾼다. 비게 되는 `material-stone-games/atelier`에는 경로·쿼리·해시를 그대로 붙여 새 주소로 보내는 페이지만 둔다.
+- **이유:** GitHub는 옛 Pages 주소를 새 주소로 연결해 주지 않는다. 유튜브 설명, 북마크, 게임 안 링크가 깨지지 않게 한다.
+- **결정 기록 안의 옛 주소는 그대로 둔다:** 그 시점의 사실이기 때문이다.
+
+### 순서: 새 도메인 허용 → 이전 → Functions 배포 → 옛 주소 페이지
+
+- **이유:** Firebase Auth 승인 도메인과 App Check(reCAPTCHA) 허용 도메인에 새 도메인이 없으면 새 주소에서 로그인과 모든 callable이 막힌다. 그래서 이전 전에 추가한다. `PAGES_ORIGIN`은 게임 iframe의 `frame-ancestors`라서, 이전 직후 바꿔 배포해야 게임이 열린다.
+- **사용자 영향:** 도메인이 바뀌면 브라우저에서는 다른 사이트라 모두 한 번 다시 로그인해야 하고, 브라우저에 저장한 설정이 초기화된다. 피할 방법이 없어 감수한다.
+
+### CLI는 1.0.1로 다시 게시
+
+- **이유:** npm 패키지의 저장소·문서 링크가 옛 주소를 가리킨다. 동작은 같다.
+
 ## 2026-11-10 · CLI 줄바꿈 고정과 배포 설정 정리
 
 ### tools/atelier-cli의 줄바꿈을 .gitattributes로 LF 고정
