@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { AccessLevel, AuthState, Comment, Game, Post, TargetType } from "./types";
 import { ManagePage } from "./ManagePage";
@@ -10,6 +10,7 @@ const GemForge = lazy(() => import("./GemForge"));
 import { accessPermission, accessShortLabel, rotationForGames } from "./lib/access";
 import { APP_BASE_PATH } from "./lib/config";
 import { loadRecent, pushRecent, saveRecent } from "./lib/recent";
+import { createSaveBridge } from "./lib/saveBridge";
 import { filterGames, popularGenres } from "./lib/search";
 import { applyTheme, loadTheme, saveTheme, watchSystemTheme, type ThemePreference } from "./lib/theme";
 import {
@@ -597,7 +598,7 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
   return (
     <div className="game-page">
       <article className="game-card">
-        <GameScreen header={header} playing={playing} playUrl={playUrl} message={playScreenMessage(auth, permission, playStatus)} locked={!auth.loading && !permission.allowed} playerRef={playerRef} />
+        <GameScreen gameId={game.id} header={header} playing={playing} playUrl={playUrl} message={playScreenMessage(auth, permission, playStatus)} locked={!auth.loading && !permission.allowed} playerRef={playerRef} />
         <div className="game-info">
           <div className="tag-row">
             {game.genres.map((genre) => <span className="tag" key={genre}># {genre}</span>)}
@@ -638,13 +639,14 @@ function lockEscape() {
 }
 
 /** The card's header and the game screen under it; together they are what goes fullscreen. */
-function GameScreen({ header, playing, playUrl, message, locked, playerRef }: { header: ReactNode; playing: boolean; playUrl: string | null; message: string; locked: boolean; playerRef: React.RefObject<HTMLDivElement | null> }) {
+function GameScreen({ gameId, header, playing, playUrl, message, locked, playerRef }: { gameId: string; header: ReactNode; playing: boolean; playUrl: string | null; message: string; locked: boolean; playerRef: React.RefObject<HTMLDivElement | null> }) {
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   // iPhone Safari has no element fullscreen, so the player falls back to covering the viewport.
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const fullscreen = nativeFullscreen || pseudoFullscreen;
   const frameRef = useRef<HTMLIFrameElement>(null);
   const capturesEscape = useRef(false);
+  useSaveBridge(gameId, frameRef, playUrl);
   // Uploaded builds run on the functions origin and demos on this one, so the target stays "*"; the payload is only a boolean.
   function announceFullscreen() {
     frameRef.current?.contentWindow?.postMessage({ type: "atelier:fullscreen-change", fullscreen }, "*");
@@ -724,6 +726,28 @@ function GameScreen({ header, playing, playUrl, message, locked, playerRef }: { 
       <div className="game-screen-frame">{screen}</div>
     </div>
   );
+}
+
+/**
+ * Lets the build keep its saves in this page's first-party storage instead of its own third-party iframe storage,
+ * which browsers may wipe when the app closes. The listener goes up before the iframe is drawn so an early
+ * `storage-hello` is not missed, and the bridge outlives the iframe so a reopened play session sees the same saves.
+ */
+function useSaveBridge(gameId: string, frameRef: React.RefObject<HTMLIFrameElement | null>, playUrl: string | null) {
+  const origin = useRef<string | null>(null);
+  origin.current = playUrl ? new URL(playUrl, window.location.href).origin : null;
+  useLayoutEffect(() => {
+    // Replies carry save data, so they go only to the frame, and only while it still shows the build's origin.
+    const bridge = createSaveBridge(gameId, (message) => {
+      if (origin.current) frameRef.current?.contentWindow?.postMessage(message, origin.current);
+    });
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frameRef.current?.contentWindow || event.origin !== origin.current) return;
+      bridge.handle(event.data);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [gameId, frameRef]);
 }
 
 // Safari before 16.4 (and iPadOS) only exposes the webkit-prefixed fullscreen API.
