@@ -1,0 +1,13 @@
+{
+  "name": "atelier-upload",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Upload web builds to Atelier through the upload API",
+  "type": "module",
+  "bin": {
+    "atelier-upload": "upload.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
