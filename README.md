@@ -38,8 +38,9 @@ Functions 환경값은 Firebase Secret Manager/Functions params로 관리합니�
 
 ```bash
 firebase functions:secrets:set PLAY_SESSION_SECRET
-firebase functions:secrets:set UPLOAD_API_KEY  # 업로드 API용, docs/upload-api.md 참고
 ```
+
+업로드 API 키는 시크릿이 아니라 사이트에서 발급합니다(설정 → 업로드 키, 또는 `atelier-cli login`). [docs/upload-api.md](docs/upload-api.md)를 참고합니다.
 
 필수 값은 `YOUTUBE_CHANNEL_ID`, `PAGES_ORIGIN`, `FUNCTIONS_BASE_URL`입니다. 관리자 Google 계정이 한 번 로그인한 뒤 Application Default Credentials가 준비된 환경에서 다음 명령으로 custom claim을 부여합니다.
 
@@ -87,7 +88,7 @@ Firebase Web config는 브라우저에 노출되는 값이므로 비밀값으로
 
 관리자가 업로드하는 ZIP은 루트(또는 하나의 최상위 폴더)에 `index.html`이 있어야 하며 웹빌드의 asset 경로는 상대 경로여야 합니다. Unity WebGL의 `.gz`/`.br` asset에는 `Content-Encoding`이 붙습니다. HTML, CSS, JS는 gateway가 전달하고, 모델·이미지·오디오·폰트·`.wasm` 같은 바이너리는 서명 URL로 Cloud Storage에서 바로 내려갑니다. 기존 게임에 새 빌드를 올리면 처리 완료까지 이전 빌드가 계속 공개되고, 성공 시 이전 빌드 파일은 삭제됩니다. 경로 순회, 절대 경로, 심볼릭 링크, 250MiB 초과 ZIP, 압축 해제 후 1GiB 초과 빌드는 거부됩니다.
 
-브라우저 없이 올리려면 `atelier-upload` CLI와 [업로드 API](docs/upload-api.md)를 씁니다. 업로드 룸과 같은 검사를 거치고, 기존 게임은 빌드만 바꿀 수 있습니다. 공개 중인 게임을 업데이트할 때 바꾼 게임 정보는 새 빌드가 공개될 때 함께 반영됩니다(업로드 룸도 동일).
+브라우저 없이 올리려면 `atelier-cli`(`npm install -g @material-stone/atelier-cli`)와 [업로드 API](docs/upload-api.md)를 씁니다. 업로드 룸과 같은 검사를 거치고, 기존 게임은 빌드만 바꿀 수 있습니다. 공개 중인 게임을 업데이트할 때 바꾼 게임 정보는 새 빌드가 공개될 때 함께 반영됩니다(업로드 룸도 동일).
 
 전체화면에는 플레이어 UI가 없으므로 웹빌드는 게임 메뉴에 나가기 버튼을 넣어야 합니다. 나가기 신호와 실행 환경 구분은 [게임 연동 가이드](docs/game-integration.md)를 참고합니다.
 

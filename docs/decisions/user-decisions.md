@@ -2,6 +2,35 @@
 
 사용자가 정한 방향과 요구사항, 그 이유입니다. Claude의 설계 판단은 [claude-decisions.md](claude-decisions.md)에 있습니다.
 
+## 2026-11-10 · atelier-cli 이름과 하위 명령, npm 배포
+
+### 도구 이름을 atelier-cli로 바꾸고 하위 명령으로 구성한다
+
+- **결정:** `atelier-upload`를 `atelier-cli`로 바꾸고, `atelier-cli login`, `atelier-cli upload`처럼 하위 명령으로 쓴다.
+- **이유:** 업로드만 하는 도구가 아니라 로그인 등 여러 일을 하는 Atelier 명령줄 도구이므로 이름과 구성을 그에 맞춘다.
+
+### 외부에서도 설치할 수 있게 npm에 등록한다
+
+- **결정:** 저장소 체크아웃 없이 `npm install -g`로 설치할 수 있게 npm 패키지로 낸다. 실제 배포(`npm publish`)는 사용자의 npm 계정으로 한다.
+- **이유:** 다른 PC나 다른 환경에서도 저장소를 받지 않고 바로 쓰고 싶다.
+
+### npm 패키지 이름은 @material-stone/atelier-cli
+
+- **결정:** Claude가 처음 정한 `@material-stone-games/atelier-cli` 대신 `@material-stone/atelier-cli`로 한다. Claude가 추천한 대로 GitHub 조직 이름도 나중에 소문자-하이픈 `material-stone`으로 맞출 계획이고, 저장소 이전은 나중에 따로 한다.
+- **이유:** 앞으로 쓸 조직 이름 `material-stone`에 맞춘다. 아직 npm에 올리기 전이라 지금 바꾸면 비용이 없다.
+
+## 2026-11-10 · 업로드 키 발급 서비스와 CLI 로그인
+
+### Atelier에서 업로드 키를 발급한다
+
+- **결정:** 키를 Secret Manager에 직접 넣는 대신 Atelier 사이트에서 발급한다.
+- **이유:** 배포 전에 키를 준비해야 하는 순서 문제가 불편했다. 사이트에서 발급하면 그런 절차가 필요 없다.
+
+### CLI 로그인까지 만든다 (Google 로그인)
+
+- **결정:** Claude가 "기본형(설정 창 발급·폐기)을 먼저 만들고 CLI 로그인은 나중에"를 추천했지만, 사용자는 처음부터 CLI 로그인까지 만들기로 했다. 로그인은 사이트의 Google 로그인을 쓴다.
+- **이유:** 키를 복사해서 붙여 넣는 과정 없이 바로 쓰고 싶다.
+
 ## 2026-11-10 · 업로드 API — 게임 정보 반영 시점, 전역 CLI·스킬
 
 ### 업데이트 때 바꾼 제목·설명은 업로드가 다 끝난 뒤에 반영한다

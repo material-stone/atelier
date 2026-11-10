@@ -1,47 +1,55 @@
 #!/usr/bin/env node
-// Uploads a web build to Atelier through the upload API, without the browser.
-// No dependencies: Node 18+ (fetch). Install globally with `npm link` in this folder, then: atelier-upload --help
+// Atelier command line: log in once, then upload web builds through the upload API without the browser.
+// No dependencies: Node 18+ (fetch). npm i -g @material-stone/atelier-cli (or npm link in this folder), then: atelier-cli help
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-const HELP = `Atelier 업로드 도구
+const HELP = `Atelier CLI
 
 사용법:
-  atelier-upload --zip <build.zip> [옵션]
-  (전역 설치 전에는 node tools/atelier-upload/upload.mjs ...)
+  atelier-cli <명령> [옵션]
 
-게임 지정 (둘 중 하나, 둘 다 없으면 새 게임):
+명령:
+  login                  브라우저에서 관리자 Google 계정으로 승인하면 이 기기에 업로드 키가 저장됨
+    --label <이름>       설정 창의 키 목록에 보일 이름 (기본: 컴퓨터 이름)
+    --no-browser         브라우저를 열지 않고 주소만 출력
+    --with-key           설정 창에서 직접 발급한 키를 붙여 넣어 저장 (브라우저 승인 없이)
+    --url <주소>         uploadApi 주소를 바꿔 저장 (보통 필요 없음)
+  logout                 이 기기의 키를 서버에서 폐기하고 지움
+  upload <build.zip>     웹빌드 ZIP을 올림 (아래 옵션)
+  status <gameId>        게임의 빌드 상태 확인
+  config                 설정을 어디서 읽는지 확인 (키는 가려서 표시)
+  help                   이 도움말
+
+upload — 게임 지정 (둘 중 하나, 둘 다 없으면 새 게임):
   --game <id>            기존 게임 ID
   --title <제목>         같은 제목의 게임이 있으면 그 게임을 업데이트, 없으면 새로 만듦
 
-게임 정보 (기존 게임에서 생략하면 지금 값 유지, 바꾼 값은 새 빌드가 공개될 때 반영):
+upload — 게임 정보 (기존 게임에서 생략하면 지금 값 유지, 바꾼 값은 새 빌드가 공개될 때 반영):
   --description <글>     설명 (500자 이하, \\n 줄바꿈 가능)
   --genres <a,b,c>       장르 태그, 쉼표로 구분 (최대 8개)
   --access <등급>        public | login | subscriber | member | private
   --emails <a@b,c@d>     private 게임의 초대 이메일
   --cover <이미지>       JPG/PNG/WebP, 5MB 이하. 새 게임은 필수
 
-중단했을 때:
+upload — 중단했을 때:
   Ctrl+C                 업로드를 취소하고 서버 상태를 되돌림 (새 게임은 삭제, 업데이트는 이전 빌드 유지)
   연결 실패로 멈춤       같은 명령을 다시 실행하면 이어서 올림
   --cancel               같은 명령에 붙이면 멈춘 업로드를 취소하고 되돌림
 
-기타:
+upload — 기타:
   --no-wait              업로드만 하고 서버 처리 완료를 기다리지 않음
-  --status <id>          업로드 없이 게임의 빌드 상태만 확인
   --dry-run              파일과 설정만 검사하고 아무것도 올리지 않음
 
-설정:
-  --init                 API URL과 키를 ~/.atelier-upload/config에 저장 (처음 한 번)
-  --config               설정을 어디서 읽는지 확인 (키는 가려서 표시)
-  읽는 순서: 환경변수 > ~/.atelier-upload/config > 도구 폴더의 .env
-  ATELIER_UPLOAD_URL     uploadApi 함수 URL
-  ATELIER_UPLOAD_KEY     업로드 API 키
+설정은 환경변수 > ~/.atelier-cli/config 순서로 읽음:
+  ATELIER_UPLOAD_URL     uploadApi 주소 (기본값이 있어 보통 필요 없음)
+  ATELIER_UPLOAD_KEY     업로드 키 (CI처럼 로그인할 수 없는 곳에서 사용)
 `;
 
 const MAX_ZIP_BYTES = 250 * 1024 * 1024;
@@ -51,11 +59,11 @@ const COVER_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "imag
 const ACCESS_LEVELS = ["public", "login", "subscriber", "member", "private"];
 // Cloud Storage keeps a resumable session for a week; stop resuming a little before that.
 const STATE_MAX_AGE_MS = 6 * 24 * 60 * 60 * 1000;
-const HOME_DIR = join(homedir(), ".atelier-upload");
+const HOME_DIR = join(homedir(), ".atelier-cli");
 const STATE_DIR = join(HOME_DIR, "state");
 // One config for every project on this machine, so they all share the same key.
 const CONFIG_PATH = join(HOME_DIR, "config");
-const LEGACY_ENV_PATH = join(dirname(fileURLToPath(import.meta.url)), ".env");
+const PACKAGE_PATH = join(dirname(fileURLToPath(import.meta.url)), "package.json");
 const DEFAULT_URL = "https://asia-northeast3-material-stone-atelier.cloudfunctions.net/uploadApi";
 const CONFIG_KEYS = ["ATELIER_UPLOAD_URL", "ATELIER_UPLOAD_KEY"];
 
@@ -79,19 +87,22 @@ async function readEnvFile(path) {
   return values;
 }
 
-/** Fills missing settings: environment first, then the user config, then the tool folder's .env. Returns where each came from. */
+/** Fills missing settings: environment first, then the user config, then the built-in URL. Returns where each came from. */
 async function loadConfig() {
   const sources = {};
   for (const key of CONFIG_KEYS) if (process.env[key]) sources[key] = "환경변수";
-  for (const path of [CONFIG_PATH, LEGACY_ENV_PATH]) {
-    const values = await readEnvFile(path);
-    for (const key of CONFIG_KEYS) {
-      if (!process.env[key] && values[key]) {
-        process.env[key] = values[key];
-        sources[key] = path;
-      }
+  const values = await readEnvFile(CONFIG_PATH);
+  for (const key of CONFIG_KEYS) {
+    if (!process.env[key] && values[key]) {
+      process.env[key] = values[key];
+      sources[key] = CONFIG_PATH;
     }
   }
+  if (!process.env.ATELIER_UPLOAD_URL) {
+    process.env.ATELIER_UPLOAD_URL = DEFAULT_URL;
+    sources.ATELIER_UPLOAD_URL = "기본값";
+  }
+  process.env.ATELIER_UPLOAD_URL = process.env.ATELIER_UPLOAD_URL.replace(/\/+$/, "");
   return sources;
 }
 
@@ -99,29 +110,90 @@ function maskKey(key) {
   return key ? `${key.slice(0, 4)}…${key.slice(-2)} (${key.length}자)` : "(없음)";
 }
 
-/** Asks for the URL and key once and saves them for every project on this machine. */
-async function initConfig() {
-  const current = await readEnvFile(CONFIG_PATH);
+/** Saves a key issued in the settings window, read from stdin so it never lands in shell history. */
+async function saveIssuedKey(url) {
   const prompt = createInterface({ input: process.stdin });
-  // The line iterator buffers input, so piped answers are not lost between questions.
-  const lines = prompt[Symbol.asyncIterator]();
-  const ask = async (question) => {
-    process.stdout.write(question);
-    const { value } = await lines.next();
-    return (value ?? "").trim();
-  };
   try {
-    const savedUrl = current.ATELIER_UPLOAD_URL || DEFAULT_URL;
-    const url = (await ask(`uploadApi URL [${savedUrl}]: `)) || savedUrl;
-    const keyHint = current.ATELIER_UPLOAD_KEY ? ` [Enter: 지금 키 유지 ${maskKey(current.ATELIER_UPLOAD_KEY)}]` : "";
-    const key = (await ask(`업로드 API 키${keyHint}: `)) || current.ATELIER_UPLOAD_KEY || "";
+    process.stdout.write("설정 창에서 발급한 업로드 키: ");
+    const { value } = await prompt[Symbol.asyncIterator]().next();
+    const key = (value ?? "").trim();
     if (!key) fail("키를 입력해 주세요.");
-    await mkdir(HOME_DIR, { recursive: true });
-    await writeFile(CONFIG_PATH, `ATELIER_UPLOAD_URL=${url}\nATELIER_UPLOAD_KEY=${key}\n`, { mode: 0o600 });
-    console.log(`저장했습니다: ${CONFIG_PATH}\n이제 어느 프로젝트에서든 atelier-upload를 쓸 수 있습니다.`);
+    await saveConfig(url, key);
+    console.log(`저장했습니다: ${CONFIG_PATH}\n이제 어느 프로젝트에서든 atelier-cli upload를 쓸 수 있습니다.`);
   } finally {
     prompt.close();
   }
+}
+
+async function saveConfig(url, key) {
+  await mkdir(HOME_DIR, { recursive: true });
+  const lines = [...(url === DEFAULT_URL ? [] : [`ATELIER_UPLOAD_URL=${url}`]), ...(key ? [`ATELIER_UPLOAD_KEY=${key}`] : [])];
+  await writeFile(CONFIG_PATH, lines.length ? `${lines.join("\n")}\n` : "", { mode: 0o600 });
+}
+
+function openBrowser(url) {
+  const [command, args] = process.platform === "win32" ? ["cmd", ["/c", "start", "", url]]
+    : process.platform === "darwin" ? ["open", [url]]
+    : ["xdg-open", [url]];
+  try {
+    spawn(command, args, { detached: true, stdio: "ignore" }).on("error", () => undefined).unref();
+  } catch {
+    // The URL is printed too, so a missing opener only means one extra click.
+  }
+}
+
+/**
+ * Device-code login: the server hands out a short code, an admin approves it on the site with their
+ * Google account, and this machine receives its own key. The key is saved, never printed.
+ */
+async function login({ label, browser }) {
+  const url = process.env.ATELIER_UPLOAD_URL;
+  const start = await fetch(`${url}/cli/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label: label || `${hostname()} (atelier-cli)` }),
+    signal: interrupt.signal,
+  });
+  const session = await start.json().catch(() => ({}));
+  if (!start.ok) throw new UserError(session.error ?? `로그인을 시작하지 못했습니다 (HTTP ${start.status})`);
+
+  console.log(`\n  코드: ${session.userCode}\n`);
+  console.log(`브라우저에서 관리자 Google 계정으로 로그인하고, 위 코드와 같은지 확인한 뒤 승인하세요.`);
+  console.log(`  ${session.verificationUrl}\n`);
+  if (browser) openBrowser(session.verificationUrl);
+
+  const deadline = Date.now() + session.expiresIn * 1000;
+  process.on("SIGINT", () => process.exit(130));
+  process.stdout.write("승인을 기다리는 중");
+  while (Date.now() < deadline) {
+    await sleep(session.interval * 1000);
+    process.stdout.write(".");
+    const response = await fetch(`${url}/cli/sessions/${session.sessionId}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pollToken: session.pollToken }),
+      signal: interrupt.signal,
+    }).catch(() => null);
+    if (!response || response.status === 202 || response.status >= 500) continue;
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new UserError(result.error ?? `로그인 실패 (HTTP ${response.status})`);
+    await saveConfig(url, result.key);
+    console.log(`\n로그인했습니다. 이 기기의 키(${result.label})를 ${CONFIG_PATH}에 저장했습니다.`);
+    return;
+  }
+  throw new UserError("10분 안에 승인되지 않았습니다. atelier-cli login을 다시 실행해 주세요.");
+}
+
+/** Revokes this machine's key on the server and removes it from the config. */
+async function logout() {
+  const config = await readEnvFile(CONFIG_PATH);
+  if (!config.ATELIER_UPLOAD_KEY) return console.log("이 기기에 저장된 키가 없습니다.");
+  const url = (config.ATELIER_UPLOAD_URL || DEFAULT_URL).replace(/\/+$/, "");
+  const response = await fetch(`${url}/keys/self`, { method: "DELETE", headers: { Authorization: `Bearer ${config.ATELIER_UPLOAD_KEY}` } }).catch(() => null);
+  await saveConfig(url, null);
+  if (response?.ok) console.log("키를 폐기하고 이 기기에서 지웠습니다.");
+  else if (response?.status === 401) console.log("이미 폐기된 키라서 이 기기에서만 지웠습니다.");
+  else console.log("이 기기에서는 지웠지만 서버에서 폐기하지 못했습니다. 설정 창의 업로드 키에서 직접 폐기해 주세요.");
 }
 
 function formatBytes(bytes) {
@@ -281,12 +353,25 @@ async function waitForBuild(gameId, versionId) {
     if (status.buildVersionId === versionId && status.buildStatus === "published") return status;
     throw new UserError(`빌드 처리 실패: ${status.buildError ?? "알 수 없는 오류 (이전 빌드는 그대로 공개 중일 수 있습니다)"}`);
   }
-  throw new UserError("12분 안에 처리가 끝나지 않았습니다. 나중에 --status로 확인해 주세요.");
+  throw new UserError("12분 안에 처리가 끝나지 않았습니다. 나중에 atelier-cli status <gameId>로 확인해 주세요.");
 }
 
+const COMMAND_OPTIONS = {
+  login: ["label", "no-browser", "with-key", "url"],
+  logout: [],
+  upload: ["zip", "game", "title", "description", "genres", "access", "emails", "cover", "cancel", "no-wait", "dry-run"],
+  status: [],
+  config: [],
+};
+
 async function main() {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
     options: {
+      label: { type: "string" },
+      "no-browser": { type: "boolean", default: false },
+      "with-key": { type: "boolean", default: false },
+      url: { type: "string" },
       zip: { type: "string" },
       game: { type: "string" },
       title: { type: "string" },
@@ -295,35 +380,52 @@ async function main() {
       access: { type: "string" },
       emails: { type: "string" },
       cover: { type: "string" },
-      status: { type: "string" },
       cancel: { type: "boolean", default: false },
-      init: { type: "boolean", default: false },
-      config: { type: "boolean", default: false },
       "no-wait": { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
+      version: { type: "boolean", short: "v", default: false },
     },
   });
-  if (values.help) return console.log(HELP);
+  const [command, ...args] = positionals;
+  if (values.version || command === "version") return console.log(JSON.parse(await readFile(PACKAGE_PATH, "utf8")).version);
+  if (values.help || !command || command === "help") return console.log(HELP);
+  if (!COMMAND_OPTIONS[command]) fail(`알 수 없는 명령: ${command}. atelier-cli help로 사용법을 확인하세요.`);
+  // Catch options given to the wrong command (for example `atelier-cli login --zip x`) instead of ignoring them.
+  const allowed = new Set(COMMAND_OPTIONS[command]);
+  const misplaced = Object.keys(values).filter((name) => !allowed.has(name) && values[name] !== false && name !== "help" && name !== "version");
+  if (misplaced.length) fail(`${command}에는 --${misplaced.join(", --")} 옵션을 쓸 수 없습니다. atelier-cli help로 확인하세요.`);
+  const maxArgs = { upload: 1, status: 1 }[command] ?? 0;
+  if (args.length > maxArgs) fail(`필요 없는 인자: ${args.slice(maxArgs).join(" ")}`);
 
-  if (values.init) return initConfig();
+  if (values.url) process.env.ATELIER_UPLOAD_URL = values.url;
   const sources = await loadConfig();
-  if (values.config) {
-    console.log(`URL: ${process.env.ATELIER_UPLOAD_URL ?? "(없음)"}  ← ${sources.ATELIER_UPLOAD_URL ?? "-"}`);
+  if (command === "login") {
+    return values["with-key"] ? saveIssuedKey(process.env.ATELIER_UPLOAD_URL) : login({ label: values.label, browser: !values["no-browser"] });
+  }
+  if (command === "logout") return logout();
+  if (command === "config") {
+    console.log(`URL: ${process.env.ATELIER_UPLOAD_URL}  ← ${sources.ATELIER_UPLOAD_URL}`);
     console.log(`키:  ${maskKey(process.env.ATELIER_UPLOAD_KEY)}  ← ${sources.ATELIER_UPLOAD_KEY ?? "-"}`);
     return;
   }
-  if (!values["dry-run"] && (!process.env.ATELIER_UPLOAD_URL || !process.env.ATELIER_UPLOAD_KEY)) {
-    fail("업로드 설정이 없습니다. atelier-upload --init으로 URL과 키를 저장해 주세요.");
-  }
 
-  if (values.status) {
-    return console.log(JSON.stringify(await api("GET", `/games/${values.status}`), null, 2));
+  const requireKey = () => {
+    if (!process.env.ATELIER_UPLOAD_KEY) fail("이 기기에 업로드 키가 없습니다. atelier-cli login으로 로그인해 주세요.");
+  };
+  if (command === "status") {
+    if (!args[0]) fail("게임 ID가 필요합니다: atelier-cli status <gameId>");
+    requireKey();
+    return console.log(JSON.stringify(await api("GET", `/games/${args[0]}`), null, 2));
   }
+  return upload(args[0] ?? values.zip, values, requireKey);
+}
 
-  if (!values.zip) fail("--zip이 필요합니다. --help로 사용법을 확인하세요.");
-  const zipSize = (await stat(values.zip).catch(() => fail(`ZIP 파일을 찾을 수 없습니다: ${values.zip}`))).size;
-  if (extname(values.zip).toLowerCase() !== ".zip") fail("--zip에는 .zip 파일을 지정해 주세요.");
+async function upload(zipPath, values, requireKey) {
+  if (!zipPath) fail("ZIP 파일이 필요합니다: atelier-cli upload <build.zip>");
+  if (!values["dry-run"]) requireKey();
+  const zipSize = (await stat(zipPath).catch(() => fail(`ZIP 파일을 찾을 수 없습니다: ${zipPath}`))).size;
+  if (extname(zipPath).toLowerCase() !== ".zip") fail(".zip 파일을 지정해 주세요.");
   if (zipSize > MAX_ZIP_BYTES) fail(`ZIP은 250MiB 이하만 올릴 수 있습니다. (현재 ${formatBytes(zipSize)})`);
 
   let cover = null;
@@ -345,13 +447,13 @@ async function main() {
   if (values.access) body.accessLevel = values.access;
   if (values.emails !== undefined) body.allowedEmails = values.emails.split(/[,\s]+/).filter(Boolean);
 
-  console.log(`ZIP: ${basename(values.zip)} (${formatBytes(zipSize)})${cover ? `, 표지: ${basename(values.cover)}` : ""}`);
+  console.log(`ZIP: ${basename(zipPath)} (${formatBytes(zipSize)})${cover ? `, 표지: ${basename(values.cover)}` : ""}`);
   if (values["dry-run"]) {
     console.log("dry-run: 요청 본문만 출력하고 끝냅니다.");
     return console.log(JSON.stringify(body, null, 2));
   }
 
-  const key = await stateKey(body, values.zip, values.cover);
+  const key = await stateKey(body, zipPath, values.cover);
   let state = await loadState(key);
 
   if (values.cancel) {
@@ -396,7 +498,7 @@ async function main() {
   };
   const uploadZip = async () => {
     if (state.zipDone) return;
-    await uploadResumable(state.buildUploadUrl, values.zip, state.zipSize, "ZIP");
+    await uploadResumable(state.buildUploadUrl, zipPath, state.zipSize, "ZIP");
     state.zipDone = true;
     await saveState(key, state);
   };
@@ -422,7 +524,7 @@ async function main() {
   }
   await clearState(key);
 
-  if (values["no-wait"]) return console.log(`업로드 완료. 처리 상태: atelier-upload --status ${state.gameId}`);
+  if (values["no-wait"]) return console.log(`업로드 완료. 처리 상태: atelier-cli status ${state.gameId}`);
   await waitForBuild(state.gameId, state.versionId);
   console.log(`공개 완료: ${state.title} (gameId ${state.gameId})`);
 }
