@@ -114,6 +114,30 @@ describe("save bridge", () => {
     ]);
   });
 
+  it("reports a failed load instead of an empty save and loads again on the next hello", async () => {
+    const real = memoryStore();
+    await real.set("game-a", "save", "day 9");
+    let broken = true;
+    const flaky: SaveStore = { ...real, load: (gameId) => (broken ? Promise.reject(new DOMException("blocked", "UnknownError")) : real.load(gameId)) };
+    const { bridge, replies } = open("game-a", flaky);
+    bridge.handle({ type: "atelier:storage-hello" });
+    // A new game started on the empty-looking copy must not overwrite the save that is still there.
+    bridge.handle({ type: "atelier:storage-set", key: "save", value: "day 1" });
+    bridge.handle({ type: "atelier:storage-remove", key: "save" });
+    await bridge.idle();
+    expect(replies).toEqual([
+      { type: "atelier:storage-error", key: null, reason: "load-failed" },
+      { type: "atelier:storage-error", key: "save", reason: "load-failed" },
+      { type: "atelier:storage-error", key: "save", reason: "load-failed" },
+    ]);
+    expect(await real.load("game-a")).toEqual({ save: "day 9" });
+
+    broken = false;
+    bridge.handle({ type: "atelier:storage-hello" });
+    await bridge.idle();
+    expect(replies.at(-1)).toEqual({ type: "atelier:storage-ready", items: { save: "day 9" } });
+  });
+
   it("leaves other messages to the player", () => {
     const { bridge } = open("game-a");
     expect(bridge.handle({ type: "atelier:exit-fullscreen" })).toBe(false);
