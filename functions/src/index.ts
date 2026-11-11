@@ -821,11 +821,20 @@ export const playGateway = onRequest({ region: "asia-northeast3", maxInstances: 
   }
   const token = readSessionToken(tokenValue);
   const gameId = decodeURIComponent(gameIdValue);
+  const relativePath = decodeURIComponent(pathValue || "index.html").replaceAll("\\", "/");
   if (!token || token.gameId !== gameId) {
+    // A phone that sleeps can reload the iframe long after the token ran out; let the page fetch a fresh session.
+    if (relativePath === "index.html") {
+      response.status(403);
+      response.set("Content-Type", "text/html; charset=utf-8");
+      response.set("Cache-Control", "no-store");
+      response.set("Content-Security-Policy", `frame-ancestors ${PAGES_ORIGIN.value()}`);
+      response.send(sessionExpiredPage(PAGES_ORIGIN.value()));
+      return;
+    }
     response.status(403).send("Session expired");
     return;
   }
-  const relativePath = decodeURIComponent(pathValue || "index.html").replaceAll("\\", "/");
   if (relativePath.startsWith("/") || relativePath.split("/").some((part) => part === ".." || part.includes("\0"))) {
     response.status(400).send("Invalid path");
     return;
@@ -850,6 +859,14 @@ export const playGateway = onRequest({ region: "asia-northeast3", maxInstances: 
   response.set("X-Content-Type-Options", "nosniff");
   file.createReadStream().on("error", () => response.end()).pipe(response);
 });
+
+/** Asks the hub page around the iframe to open a fresh play session; the text is only for a page opened on its own. */
+function sessionExpiredPage(pagesOrigin: string): string {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<body style="margin:0;display:grid;place-items:center;height:100vh;background:#111;color:#bbb;font:14px sans-serif">
+<p>게임을 다시 불러오는 중입니다…</p>
+<script>parent.postMessage({ type: "atelier:session-expired" }, ${JSON.stringify(pagesOrigin)});</script>`;
+}
 
 // Signing is a remote IAM call, and a URL stays the same for its whole window.
 const signedUrls = new Map<string, string>();

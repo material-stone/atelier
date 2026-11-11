@@ -486,6 +486,7 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
   const [viewCount, setViewCount] = useState<number | null>(null);
   const { verifying, verify: verifySubscriber } = useSubscriptionCheck(auth, onNotify);
   const playerRef = useRef<HTMLDivElement>(null);
+  const lastSessionRenewal = useRef(0);
 
   // The live list may not hold this game yet (or ever, for a direct link), so ask for it once.
   useEffect(() => {
@@ -555,6 +556,19 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
     }
   }
 
+  // The build's play token ran out (often after the phone slept and the iframe reloaded), so open a fresh session in place.
+  function renewSession() {
+    const now = Date.now();
+    // A fresh token that is refused at once points to a server problem, so stop instead of reloading forever.
+    if (now - lastSessionRenewal.current < 30_000) {
+      setPlaying(false);
+      setPlayStatus("게임 세션을 다시 열지 못했습니다. 페이지를 새로고침해 주세요.");
+      return;
+    }
+    lastSessionRenewal.current = now;
+    void startPlaying();
+  }
+
   async function like() {
     if (!game) return;
     if (!auth.user) return onNotify("좋아요를 누르려면 Google 로그인이 필요합니다.");
@@ -595,7 +609,7 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
   return (
     <div className="game-page">
       <article className="game-card">
-        <GameScreen gameId={game.id} header={header} playing={playing} playUrl={playUrl} message={playScreenMessage(auth, permission, playStatus, freeThisWeek)} locked={!auth.loading && !permission.allowed} playerRef={playerRef} />
+        <GameScreen gameId={game.id} header={header} playing={playing} playUrl={playUrl} message={playScreenMessage(auth, permission, playStatus, freeThisWeek)} locked={!auth.loading && !permission.allowed} playerRef={playerRef} onSessionExpired={renewSession} />
         <div className="game-info">
           <div className="tag-row">
             {game.genres.map((genre) => <span className="tag" key={genre}># {genre}</span>)}
@@ -638,13 +652,16 @@ function lockEscape() {
 }
 
 /** The card's header and the game screen under it; together they are what goes fullscreen. */
-function GameScreen({ gameId, header, playing, playUrl, message, locked, playerRef }: { gameId: string; header: ReactNode; playing: boolean; playUrl: string | null; message: string; locked: boolean; playerRef: React.RefObject<HTMLDivElement | null> }) {
+function GameScreen({ gameId, header, playing, playUrl, message, locked, playerRef, onSessionExpired }: { gameId: string; header: ReactNode; playing: boolean; playUrl: string | null; message: string; locked: boolean; playerRef: React.RefObject<HTMLDivElement | null>; onSessionExpired: () => void }) {
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   // iPhone Safari has no element fullscreen, so the player falls back to covering the viewport.
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const fullscreen = nativeFullscreen || pseudoFullscreen;
   const frameRef = useRef<HTMLIFrameElement>(null);
   const capturesEscape = useRef(false);
+  // The message listener below lives across renders, so it reads the latest handler through a ref.
+  const sessionExpired = useRef(onSessionExpired);
+  sessionExpired.current = onSessionExpired;
   useSaveBridge(gameId, frameRef, playUrl);
   // Uploaded builds run on the functions origin and demos on this one, so the target stays "*"; the payload is only a boolean.
   function announceFullscreen() {
@@ -669,6 +686,8 @@ function GameScreen({ gameId, header, playing, playUrl, message, locked, playerR
         capturesEscape.current = true;
         if (nativeFullscreen) lockEscape();
       }
+      // Sent by the gateway's own page when the token ran out; a build faking it only reloads itself.
+      if (event.data?.type === "atelier:session-expired") sessionExpired.current();
       if (event.data?.type === "atelier:exit-fullscreen") {
         if (pseudoFullscreen) setPseudoFullscreen(false);
         else if (nativeFullscreen) void exitFullscreen();
