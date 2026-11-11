@@ -210,6 +210,13 @@ export const verifyYoutubeSubscription = onCall({ region: "asia-northeast3", enf
   return { verifiedUntil: verifiedUntil.toDate().toISOString() };
 });
 
+/** Lets a player withdraw their own subscription check; the rotation locks again until they verify anew. */
+export const clearYoutubeVerification = onCall({ region: "asia-northeast3", enforceAppCheck: true, maxInstances: 2 }, async (request) => {
+  const auth = requireUser(request);
+  await db.doc(`users/${auth.uid}`).set({ youtubeVerifiedUntil: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return { cleared: true };
+});
+
 /**
  * Game info changes sent with an update of a published game, held until its build publishes.
  * Kept apart from games/{id} because that document is public and may carry invitee emails.

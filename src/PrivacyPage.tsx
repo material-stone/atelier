@@ -47,7 +47,7 @@ export function PrivacyPage() {
         <p>서비스는 Google LLC의 Firebase·Google Cloud(데이터 저장 위치: 서울 리전 asia-northeast3)와 GitHub Pages(웹사이트 호스팅)를 이용합니다. 이 과정에서 정보가 해당 사업자의 시스템에서 처리될 수 있습니다.</p>
 
         <h2>5. 이용자의 권리</h2>
-        <p>언제든지 본인 정보의 열람·정정·삭제와 처리 정지를 요청할 수 있습니다. 아래 연락처로 요청하면 지체 없이 처리합니다. Google 계정의 Atelier 접근 권한은 Google 계정 설정(보안 → 서드 파티 앱)에서 직접 해제할 수 있습니다.</p>
+        <p>언제든지 본인 정보의 열람·정정·삭제와 처리 정지를 요청할 수 있습니다. 아래 연락처로 요청하면 지체 없이 처리합니다. YouTube 구독 확인 결과는 설정 → 계정의 "확인 해제"로 직접 지울 수 있고, Google 계정의 Atelier 접근 권한은 Google 계정 설정(보안 → 서드 파티 앱)에서 직접 해제할 수 있습니다.</p>
 
         <h2>6. 문의</h2>
         <p>개인정보 관련 문의: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></p>

@@ -118,6 +118,13 @@ export async function verifyYoutubeSubscription(): Promise<{ verifiedUntil: stri
   return result.data;
 }
 
+/** Removes this account's subscription check so it can be verified again from the start. */
+export async function clearYoutubeVerification(): Promise<void> {
+  if (!auth?.currentUser || !functions) throw new Error("Google 로그인 후 다시 시도해 주세요.");
+  await httpsCallable(functions, "clearYoutubeVerification")({});
+  await refreshAuthState();
+}
+
 export async function signOutUser(): Promise<void> {
   if (auth) await signOut(auth);
 }
