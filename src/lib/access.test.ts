@@ -54,6 +54,16 @@ describe("weekly rotation", () => {
   });
 });
 
+describe("subscription check expiry", () => {
+  it("lasts until Monday 00:00 KST, and at least a day", async () => {
+    const { subscriptionCheckExpiry } = await import("../../functions/src/access");
+    expect(subscriptionCheckExpiry(new Date("2026-11-11T15:00:00+09:00")).toISOString()).toBe(new Date("2026-11-16T00:00:00+09:00").toISOString());
+    expect(subscriptionCheckExpiry(new Date("2026-11-16T00:00:00+09:00")).toISOString()).toBe(new Date("2026-11-23T00:00:00+09:00").toISOString());
+    const sundayNight = new Date("2026-11-15T23:30:00+09:00");
+    expect(subscriptionCheckExpiry(sundayNight).getTime()).toBe(sundayNight.getTime() + 24 * 60 * 60 * 1000);
+  });
+});
+
 describe("access permission", () => {
   const rotation = new Set(["free"]);
   const subscriber = { ...signedIn, isSubscriber: true };

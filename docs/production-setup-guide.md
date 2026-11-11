@@ -491,8 +491,8 @@ git push origin main
 - [ ] prototype/subscriber 게임에서 YouTube 권한 동의 popup이 열린다.
 - [ ] 실제 Material Stone 채널을 구독한 계정만 검증에 성공한다.
 - [ ] 구독하지 않은 계정은 검증 실패하며 프로토타입이 열리지 않는다.
-- [ ] 구독 확인값이 24시간 캐시되는지 확인한다.
-- [ ] 24시간이 지나거나 users 문서의 `youtubeVerifiedUntil`이 만료되면 다시 검증해야 한다.
+- [ ] 구독 확인값이 그 주 로테이션이 끝나는 월요일 0시(KST)까지, 최소 24시간 유지되는지 확인한다.
+- [ ] users 문서의 `youtubeVerifiedUntil`이 만료되면 다시 검증해야 한다. 설정 → 계정의 "확인 해제"로 직접 지울 수 있다.
 - [ ] 관리자 claim이 없는 계정은 `/admin`에서 upload UI를 보지 못한다.
 - [ ] 관리자 claim을 부여한 뒤 로그아웃/재로그인하면 업로드 UI가 보인다.
 

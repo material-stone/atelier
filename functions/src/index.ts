@@ -10,7 +10,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { logger } from "firebase-functions";
 import mime from "mime-types";
 import unzipper from "unzipper";
-import { type AccessLevel, defaultStage, isGameStage, normalizeAccessLevel, normalizeEmailList, weeklyRotationIds } from "./access.js";
+import { type AccessLevel, defaultStage, isGameStage, normalizeAccessLevel, normalizeEmailList, subscriptionCheckExpiry, weeklyRotationIds } from "./access.js";
 import { bearerToken, hashSecret, keyPreview, newApiKey, newPollToken, newUserCode, normalizeUserCode, sameDigest } from "./apiKey.js";
 import { DIRECT_ASSET_CACHE_CONTROL, isDirectAsset, signedUrlWindow } from "./delivery.js";
 import { monthKeyBefore, pageMonthKey } from "./month.js";
@@ -205,7 +205,8 @@ export const verifyYoutubeSubscription = onCall({ region: "asia-northeast3", enf
   const data = (await response.json()) as { items?: unknown[] };
   if (!data.items?.length) throw new HttpsError("permission-denied", "Material Stone YouTube 채널 구독을 확인하지 못했습니다.");
 
-  const verifiedUntil = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+  // Lasts through the rotation week so subscribers are not asked again every day.
+  const verifiedUntil = Timestamp.fromDate(subscriptionCheckExpiry());
   await db.doc(`users/${auth.uid}`).set({ youtubeVerifiedUntil: verifiedUntil, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return { verifiedUntil: verifiedUntil.toDate().toISOString() };
 });
