@@ -6,15 +6,21 @@
 
 Google 로그인(이메일·프로필)만 쓰는 일반 로그인에는 이 경고가 뜨지 않습니다. 코드는 일반 로그인과 YouTube 권한 요청을 이미 분리해 두었습니다(`src/lib/services.ts`).
 
+## 진행 상황 (2026-11-11)
+
+- 완료: Search Console `materialstone.dev` 소유 확인(Cloudflare 자동 TXT), 브랜딩 주소·승인된 도메인 변경, `youtube.readonly` 범위 사용 사유 입력, 브랜딩 인증 요청.
+- 남은 것: 데모 영상을 YouTube(일부 공개)에 올려 데이터 액세스의 "YouTube 링크"에 넣고 인증 센터에서 데이터 액세스 인증 제출.
+- 주소 끝의 `/`는 GitHub Pages가 200으로 응답하는 실제 파일 경로(`about/index.html`, `privacy/index.html`)를 가리키게 하려고 붙입니다.
+
 ## 신청 전에 준비할 것
 
 1. **도메인 소유 확인**: Google Search Console에서 `materialstone.dev`를 소유 확인합니다. Cloud 프로젝트의 소유자(또는 편집자) 계정으로 해야 합니다.
 2. **OAuth 동의 화면 → 브랜딩**
    - 앱 이름: `Atelier` (홈페이지와 같은 이름)
-   - 사용자 지원 이메일: `materialstonegames@gmail.com`
+   - 사용자 지원 이메일: 프로젝트 소유자 계정의 이메일만 고를 수 있습니다(관리 중인 Google 그룹이 없으면 다른 주소 선택 불가).
    - 앱 로고: 120×120 정사각형 (선택이지만 넣으면 로고도 함께 검토)
-   - 앱 홈페이지: `https://atelier.materialstone.dev/about`
-   - 개인정보처리방침: `https://atelier.materialstone.dev/privacy`
+   - 앱 홈페이지: `https://atelier.materialstone.dev/about/`
+   - 개인정보처리방침: `https://atelier.materialstone.dev/privacy/`
    - 승인된 도메인: `materialstone.dev` (Firebase 로그인 도메인 `material-stone-atelier.firebaseapp.com`을 쓰면 `firebaseapp.com`도 등록되어 있어야 합니다)
 3. **데이터 액세스(범위)**: `.../auth/youtube.readonly` 하나만 등록합니다. 쓰지 않는 범위가 있으면 지웁니다.
 4. **게시 상태**: "프로덕션 단계"로 둔 뒤 "앱 확인 준비" → 검증 제출.
