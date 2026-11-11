@@ -1,0 +1,59 @@
+1
+00:00:00,000 --> 00:00:03,500
+Atelier (atelier.materialstone.dev), the game hub of Material Stone Games
+
+2
+00:00:03,500 --> 00:00:07,500
+The player signs in with Google
+
+3
+00:00:07,500 --> 00:00:16,000
+Basic Google Sign-In asks only for name, email and profile picture.
+No YouTube access is requested here.
+
+4
+00:00:16,000 --> 00:00:18,500
+After sign-in, Atelier offers a YouTube subscription check
+for this week's subscriber prototype
+
+5
+00:00:18,500 --> 00:00:23,500
+The player clicks "Verify subscription" and picks the same Google account
+
+6
+00:00:23,500 --> 00:00:28,000
+Google shows the unverified-app notice (expected before verification).
+The player continues via Advanced.
+
+7
+00:00:28,000 --> 00:00:41,500
+Consent screen: Atelier requests a single scope,
+"View your YouTube account" (youtube.readonly)
+
+8
+00:00:41,500 --> 00:00:57,000
+The address bar shows this app's OAuth client ID (client_id=...)
+
+9
+00:00:57,000 --> 00:01:00,000
+The player allows access
+
+10
+00:01:00,000 --> 00:01:04,000
+Our server calls subscriptions.list once (mine=true, forChannelId = our channel)
+and confirms the subscription
+
+11
+00:01:04,000 --> 00:01:13,000
+Atelier stores only yes/no and an expiry (end of this week). The access token is never stored.
+Players can clear the check at any time in Settings.
+
+12
+00:01:13,000 --> 00:01:28,000
+This week's subscriber prototype is now playable
+
+13
+00:01:28,000 --> 00:01:40,300
+Privacy policy: YouTube data use follows the Google API Services
+User Data Policy, including the Limited Use requirements
+
