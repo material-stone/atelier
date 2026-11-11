@@ -1,0 +1,25 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 3438
+PlayResY: 1438
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,56,&H00FFFFFF,&H00FFFFFF,&H30000000,&H30000000,1,0,0,0,100,100,0,0,3,18,0,2,80,80,90,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.50,Default,,0,0,0,,Atelier (atelier.materialstone.dev), the game hub of Material Stone Games
+Dialogue: 0,0:00:03.50,0:00:07.50,Default,,0,0,0,,The player signs in with Google
+Dialogue: 0,0:00:07.50,0:00:16.00,Default,,0,0,0,,Basic Google Sign-In asks only for name, email and profile picture.\NNo YouTube access is requested here.
+Dialogue: 0,0:00:16.00,0:00:18.50,Default,,0,0,0,,After sign-in, Atelier offers a YouTube subscription check\Nfor this week's subscriber prototype
+Dialogue: 0,0:00:18.50,0:00:23.50,Default,,0,0,0,,The player clicks "Verify subscription" and picks the same Google account
+Dialogue: 0,0:00:23.50,0:00:28.00,Default,,0,0,0,,Google shows the unverified-app notice (expected before verification).\NThe player continues via Advanced.
+Dialogue: 0,0:00:28.00,0:00:41.50,Default,,0,0,0,,Consent screen: Atelier requests a single scope,\N"View your YouTube account" (youtube.readonly)
+Dialogue: 0,0:00:41.50,0:00:57.00,Default,,0,0,0,,The address bar shows this app's OAuth client ID (client_id=...)
+Dialogue: 0,0:00:57.00,0:01:00.00,Default,,0,0,0,,The player allows access
+Dialogue: 0,0:01:00.00,0:01:04.00,Default,,0,0,0,,Our server calls subscriptions.list once (mine=true, forChannelId = our channel)\Nand confirms the subscription
+Dialogue: 0,0:01:04.00,0:01:13.00,Default,,0,0,0,,Atelier stores only yes/no and an expiry (end of this week). The access token is never stored.\NPlayers can clear the check at any time in Settings.
+Dialogue: 0,0:01:13.00,0:01:28.00,Default,,0,0,0,,This week's subscriber prototype is now playable
+Dialogue: 0,0:01:28.00,0:01:40.30,Default,,0,0,0,,Privacy policy: YouTube data use follows the Google API Services\NUser Data Policy, including the Limited Use requirements

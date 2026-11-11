@@ -11,6 +11,7 @@ Google 로그인(이메일·프로필)만 쓰는 일반 로그인에는 이 경�
 - **제출 완료 — Google 검토 중.** 인증 센터의 데이터 액세스 상태가 "검토하는 중"입니다. 결과와 추가 자료 요청은 개발자 연락처(프로젝트 소유자 이메일)로 옵니다.
 - 완료한 것: Search Console `materialstone.dev` 소유 확인(Cloudflare 자동 TXT), 브랜딩 주소·승인된 도메인 변경 후 브랜딩 인증·게시, `youtube.readonly` 범위 사용 사유 입력, 데모 영상 제출.
 - 데모 영상: https://youtu.be/5w-ZOM9Sl5Q (Material Stone 채널, 일부 공개, 영어 자막). 검토가 끝날 때까지 지우거나 비공개로 바꾸지 않습니다.
+- 영상 파일은 동의 화면에 개인 계정이 보여서 공개 저장소에 넣지 않고, 메인 체크아웃의 `media/oauth-demo/`(gitignore)에 둡니다. 자막은 `docs/oauth-verification/`에 있습니다: `demo.en.srt`(YouTube 자막용), `demo.ass`(영상에 입힌 스타일), `make-subtitles.py`(자막 문구·타이밍 원본). 다시 입히려면 `ffmpeg -i <원본.mp4> -vf ass=demo.ass -c:v libx264 -crf 20 -c:a copy <출력.mp4>`.
 - 추가 정보 칸에 검토자용 테스트 방법(로그인 → 배너 또는 설정 → 계정의 구독 확인, 구독 채널 링크, 확인 해제)을 적었습니다.
 - 설문 답: 개인용·내부 전용·개발/테스트 전용·WordPress 플러그인 모두 "아니요".
 - 주소 끝의 `/`는 GitHub Pages가 200으로 응답하는 실제 파일 경로(`about/index.html`, `privacy/index.html`)를 가리키게 하려고 붙입니다.

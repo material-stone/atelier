@@ -11,3 +11,6 @@ functions/.env
 .claude/
 
 test-builds/
+
+# Local recordings (e.g. the OAuth demo video shows a personal account; keep it out of this public repo).
+media/
