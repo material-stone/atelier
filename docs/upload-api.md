@@ -102,7 +102,7 @@ CLI ── POST /cli/sessions/{id}/token (3초마다) ──▶ 승인됐으면 
 
 ```bash
 # 새 게임 (표지 필수)
-atelier-cli upload build.zip --title "Ember Archive" --access public --genres "Adventure,Puzzle" --description "조작: 방향키" --cover cover.png
+atelier-cli upload build.zip --title "Ember Archive" --stage release --access public --genres "Adventure,Puzzle" --description "조작: 방향키" --cover cover.png
 
 # 기존 게임에 새 빌드만 (게임 정보는 그대로)
 atelier-cli upload build.zip --title "Ember Archive"
@@ -156,12 +156,13 @@ CLI 로그인 두 경로를 빼면 모든 요청에 `Authorization: Bearer <업�
 | `cover.size`, `cover.contentType` | 새 게임은 필수. `image/jpeg`, `image/png`, `image/webp`, 5MB 이하 |
 | `gameId` | 업데이트할 게임. 없으면 `title`이 같은 게임을 찾고, 그것도 없으면 새로 만듭니다 |
 | `title`, `description`, `genres`, `accessLevel`, `allowedEmails` | 웹 업로드와 같은 규칙. 기존 게임에서 생략하면 지금 값 유지. 공개 중인 게임은 새 빌드가 공개될 때 반영 |
+| `stage` | `release` · `demo` · `prototype`. 표시용이며 권한은 `accessLevel`(`public` · `member` · `private`)만 정함. 새 게임에서 생략하면 `accessLevel`에 맞춰 정함(`member`·`private`→`prototype`, 나머지→`release`). 예전 값 `login`은 `public` + `demo`로, `subscriber`는 `member` + `prototype`으로 받음 |
 
 응답: `{ gameId, versionId, created, title, buildUploadUrl, coverUploadUrl }`. 업로드 URL은 Cloud Storage [resumable upload](https://cloud.google.com/storage/docs/performing-resumable-uploads) 세션이며 일주일 동안 유효합니다.
 
 ### `GET /games/{gameId}`
 
-응답: `{ gameId, title, accessLevel, buildStatus, buildVersionId, pendingVersionId, buildError }`.
+응답: `{ gameId, title, accessLevel, stage, buildStatus, buildVersionId, pendingVersionId, buildError }`.
 
 - 업데이트 처리 중: `pendingVersionId`가 이번 `versionId`
 - 성공: `buildVersionId`가 이번 `versionId`이고 `buildStatus`가 `published`

@@ -73,12 +73,21 @@ Firebase Web config는 브라우저에 노출되는 값이므로 비밀값으로
 
 ## Access levels
 
+게임에는 단계(`stage`)와 접근 등급(`accessLevel`)이 따로 있습니다. 단계는 표시용이고, 누가 플레이할 수 있는지는 접근 등급만 정합니다.
+
+| 단계 | 뜻 | 보통 쓰는 등급 |
+| --- | --- | --- |
+| `release` | 공개 | `public` |
+| `demo` | 데모 | `public` |
+| `prototype` | 프로토타입 | `member` |
+
 | 등급 | 플레이 가능 |
 | --- | --- |
-| `public` | 누구나 |
-| `login` | Google 로그인 사용자 |
-| `subscriber` | YouTube 구독 확인 사용자·멤버. 매주(KST 월요일 기준) 3~5개는 누구에게나 무료 |
-| `member` | 채널 멤버십 회원(`npm --prefix functions run set-member -- <email> [days\|off]`로 부여) |
+| `public` | 누구나 (로그인 없이) |
+| `member` | 채널 멤버십 회원(`npm --prefix functions run set-member -- <email> [days\|off]`로 부여). 매주(KST 월요일 기준) `member` 게임의 30%(최소 1개)는 YouTube 구독자에게도 열리고, 지난주에 열린 게임은 되도록 다시 고르지 않음 |
+| `private` | 초대한 이메일 |
+
+예전 `login`·`subscriber` 등급은 없어졌습니다. YouTube 구독은 주간 로테이션을 여는 데만 씁니다. 아직 남은 게임은 각각 `public`·`member`로 읽히며, `npm --prefix functions run migrate-stages`(기본은 미리보기, `-- --apply`로 적용)로 옮깁니다.
 
 관리자(`admin: true`)는 모든 등급을 플레이할 수 있습니다.
 

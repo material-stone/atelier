@@ -23,6 +23,7 @@ service cloud.firestore {
       allow delete: if admin();
     }
 
+    // 'login' and 'subscriber' are retired levels, kept listed until functions/scripts/migrate-stages.mjs has run.
     function listedLevel(level) {
       return level in ['public', 'login', 'subscriber', 'member'];
     }

@@ -7,7 +7,7 @@ import { PrivacyPage } from "./PrivacyPage";
 
 // three.js is heavy, so the gem animation on the about page loads in its own chunk.
 const GemForge = lazy(() => import("./GemForge"));
-import { accessPermission, accessShortLabel, rotationForGames } from "./lib/access";
+import { accessPermission, accessShortLabel, rotationForGames, stageLabel } from "./lib/access";
 import { APP_BASE_PATH } from "./lib/config";
 import { loadRecent, pushRecent, saveRecent } from "./lib/recent";
 import { createSaveBridge } from "./lib/saveBridge";
@@ -284,11 +284,11 @@ function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onCl
                   <div className="setting-copy"><strong>{name}</strong><p>Google 계정으로 로그인됨 · 댓글과 글에 이 이름이 보여요</p></div>
                 </div>
                 <div className="setting-row">
-                  <div className="setting-copy"><strong>YouTube 구독 <span className={`status-badge${auth.isSubscriber ? " is-on" : ""}`}>{auth.isSubscriber ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isSubscriber ? "구독자 프로토타입을 플레이할 수 있어요." : "채널을 구독한 뒤 확인하면 구독자 프로토타입이 열려요."}</p></div>
+                  <div className="setting-copy"><strong>YouTube 구독 <span className={`status-badge${auth.isSubscriber ? " is-on" : ""}`}>{auth.isSubscriber ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isSubscriber ? "매주 바뀌는 로테이션 프로토타입을 플레이할 수 있어요." : "채널을 구독한 뒤 확인하면 매주 바뀌는 프로토타입이 열려요."}</p></div>
                   <button className="button button-quiet small" type="button" onClick={verify} disabled={verifying}>{verifying ? "확인 중…" : auth.isSubscriber ? "다시 확인" : "구독 확인"}</button>
                 </div>
                 <div className="setting-row">
-                  <div className="setting-copy"><strong>채널 멤버십 <span className={`status-badge${auth.isMember ? " is-on" : ""}`}>{auth.isMember ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isMember ? "얼리 액세스 게임을 플레이할 수 있어요." : "운영자가 멤버십을 확인하면 얼리 액세스 게임이 열려요."}</p></div>
+                  <div className="setting-copy"><strong>채널 멤버십 <span className={`status-badge${auth.isMember ? " is-on" : ""}`}>{auth.isMember ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isMember ? "모든 프로토타입을 플레이할 수 있어요." : "운영자가 멤버십을 확인하면 모든 프로토타입이 열려요."}</p></div>
                   <a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a>
                 </div>
                 <div className="setting-row">
@@ -369,7 +369,6 @@ function AccountMenu({ auth, onSettings, onNotify }: { auth: AuthState; onSettin
 function Sidebar({ auth, games, recent, open, onClose, onSettings, onNotify }: { auth: AuthState; games: Game[]; recent: string[]; open: boolean; onClose: () => void; onSettings: () => void; onNotify: Notify }) {
   const rotation = useMemo(() => rotationForGames(games), [games]);
   const recentGames = recent.map((id) => games.find((game) => game.id === id)).filter((game): game is Game => Boolean(game));
-  const badge = (game: Game) => (rotation.has(game.id) ? "이번 주 무료" : game.accessLevel === "public" ? null : accessShortLabel(game.accessLevel));
   const sideLink = ({ isActive }: { isActive: boolean }) => `side-link${isActive ? " is-active" : ""}`;
 
   return (
@@ -394,7 +393,7 @@ function Sidebar({ auth, games, recent, open, onClose, onSettings, onNotify }: {
         <div className="side-group">
           <h2 className="side-heading">전체 게임</h2>
           {games.map((game) => {
-            const label = badge(game);
+            const label = gameBadge(game, rotation);
             return <NavLink key={game.id} to={`/game/${game.id}`} className={sideLink}><span className="side-title">{game.title}</span>{label ? <span className="side-badge">{label}</span> : null}</NavLink>;
           })}
         </div>
@@ -408,8 +407,10 @@ function Sidebar({ auth, games, recent, open, onClose, onSettings, onNotify }: {
 
 /* ---------- Home: search and the game list ---------- */
 
+/** One short badge per game: this week's rotation first, then the stage, then who may play. */
 function gameBadge(game: Game, rotation: Set<string>): string | null {
-  if (rotation.has(game.id)) return "이번 주 무료";
+  if (rotation.has(game.id)) return "이번 주 구독자";
+  if (game.stage !== "release") return stageLabel(game.stage);
   return game.accessLevel === "public" ? null : accessShortLabel(game.accessLevel);
 }
 
@@ -531,14 +532,10 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
     return <EmptyState title="게임을 찾을 수 없어요" text="아직 공개되지 않았거나 주소가 잘못되었어요." />;
   }
 
-  const freeThisWeek = game.accessLevel === "subscriber" && rotation.has(game.id);
+  const freeThisWeek = game.accessLevel === "member" && rotation.has(game.id);
   async function startPlaying() {
     if (!game) return;
-    if (!permission.allowed) {
-      if (permission.reason === "login") return onNotify("이 게임은 Google 로그인 후 플레이할 수 있습니다.");
-      if (permission.reason === "member") return onNotify("이 얼리 액세스 빌드는 채널 멤버십 회원에게만 열립니다.");
-      return onNotify("이 프로토타입은 YouTube 채널 구독 확인 후 열립니다.");
-    }
+    if (!permission.allowed) return onNotify(playScreenMessage(auth, permission, "", freeThisWeek));
     if (!hasFirebaseConfig) {
       const demoPlayPath = game?.demoPlayPath;
       setPlayUrl(demoPlayPath ? `${import.meta.env.BASE_URL}${demoPlayPath}` : null);
@@ -612,19 +609,20 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
   return (
     <div className="game-page">
       <article className="game-card">
-        <GameScreen gameId={game.id} header={header} playing={playing} playUrl={playUrl} message={playScreenMessage(auth, permission, playStatus)} locked={!auth.loading && !permission.allowed} playerRef={playerRef} onSessionExpired={renewSession} />
+        <GameScreen gameId={game.id} header={header} playing={playing} playUrl={playUrl} message={playScreenMessage(auth, permission, playStatus, freeThisWeek)} locked={!auth.loading && !permission.allowed} playerRef={playerRef} onSessionExpired={renewSession} />
         <div className="game-info">
           <div className="tag-row">
             {game.genres.map((genre) => <span className="tag" key={genre}># {genre}</span>)}
-            <span className={`tag access-tag ${game.accessLevel}`}>{accessShortLabel(game.accessLevel)}</span>
-            {freeThisWeek ? <span className="tag access-tag public">이번 주 무료</span> : null}
+            <span className={`tag stage-tag ${game.stage}`}>{stageLabel(game.stage)}</span>
+            {game.accessLevel !== "public" ? <span className={`tag access-tag ${game.accessLevel}`}>{accessShortLabel(game.accessLevel)}</span> : null}
+            {freeThisWeek ? <span className="tag access-tag subscriber">이번 주 구독자</span> : null}
           </div>
           <p className="game-description">{game.description || "Material Stone Games의 플레이 가능한 작업물입니다. 지금의 빌드에서 다음 아이디어를 만나보세요."}</p>
           <p className="game-stats">{viewCount !== null ? `조회 ${viewCount.toLocaleString("ko-KR")} · ` : ""}좋아요 {likeCount}</p>
         </div>
       </article>
-      {!permission.allowed && permission.reason === "member" ? <div className="callout"><div><strong>채널 멤버 얼리 액세스</strong><p>Material Stone 채널 멤버십 회원에게 먼저 열리는 빌드입니다. 멤버십 확인은 운영자가 처리합니다.</p></div><a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a></div> : null}
-      {!permission.allowed && permission.reason === "subscriber" && auth.user ? <div className="callout"><div><strong>구독자 프로토타입</strong><p>Material Stone YouTube 채널 구독을 확인하면 이 빌드가 열립니다.</p></div><button className="button button-primary small" type="button" onClick={verifySubscriber} disabled={verifying}>{verifying ? "확인 중…" : "구독 확인"}</button><a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a></div> : null}
+      {!permission.allowed && permission.reason === "member" ? <div className="callout"><div><strong>멤버 프로토타입</strong><p>Material Stone 채널 멤버십 회원에게 열리는 빌드입니다. 매주 일부는 구독자에게도 열려요. 멤버십 확인은 운영자가 처리합니다.</p></div><a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a></div> : null}
+      {!permission.allowed && permission.reason === "subscriber" && auth.user ? <div className="callout"><div><strong>이번 주 구독자에게 열린 프로토타입</strong><p>Material Stone YouTube 채널 구독을 확인하면 이번 주에 이 빌드가 열립니다.</p></div><button className="button button-primary small" type="button" onClick={verifySubscriber} disabled={verifying}>{verifying ? "확인 중…" : "구독 확인"}</button><a className="button button-quiet small" href={getConfiguredYoutubeUrl()} target="_blank" rel="noreferrer">채널 열기 ↗</a></div> : null}
       <section className="game-comments">
         <CommentThread targetType="game" targetId={game.id} auth={auth} onNotify={onNotify} heading="플레이어 한마디" docked />
       </section>
@@ -632,12 +630,13 @@ function GamePage({ gameId, auth, games, onNotify, onPlayed }: { gameId: string;
   );
 }
 
-function playScreenMessage(auth: AuthState, permission: ReturnType<typeof accessPermission>, status: string): string {
+function playScreenMessage(auth: AuthState, permission: ReturnType<typeof accessPermission>, status: string, freeThisWeek: boolean): string {
   if (auth.loading) return "접근 권한을 확인하는 중입니다…";
   if (!permission.allowed) {
+    if (permission.reason === "member") return "채널 멤버십 회원에게 열리는 프로토타입입니다.";
+    if (freeThisWeek) return auth.user ? "이번 주 구독자에게 열린 프로토타입이에요. YouTube 채널 구독을 확인하면 플레이할 수 있습니다." : "이번 주 구독자에게 열린 프로토타입이에요. Google 로그인 후 YouTube 채널 구독을 확인해 주세요.";
     if (permission.reason === "login") return "Google 로그인 후 플레이할 수 있는 게임입니다.";
-    if (permission.reason === "member") return "채널 멤버십 회원에게만 열리는 얼리 액세스 빌드입니다.";
-    return auth.user ? "YouTube 채널 구독을 확인하면 플레이할 수 있습니다." : "Google 로그인 후 YouTube 채널 구독을 확인하면 플레이할 수 있습니다.";
+    return "YouTube 채널 구독을 확인하면 플레이할 수 있습니다.";
   }
   if (status === "loading" || status === "idle") return "게임을 불러오는 중입니다…";
   return status;
@@ -1038,7 +1037,7 @@ function GameLinkCard({ game }: { game: Game }) {
   return (
     <Link className="game-link" to={`/game/${game.id}`}>
       <span className="game-link-thumb" style={game.coverUrl ? { backgroundImage: `url(${game.coverUrl})` } : undefined} aria-hidden="true" />
-      <span className="game-link-copy"><strong>{game.title}</strong><span>{[genreText(game), accessShortLabel(game.accessLevel)].filter(Boolean).join(" · ")}</span></span>
+      <span className="game-link-copy"><strong>{game.title}</strong><span>{[genreText(game), game.stage !== "release" ? stageLabel(game.stage) : null, game.accessLevel !== "public" ? accessShortLabel(game.accessLevel) : null].filter(Boolean).join(" · ")}</span></span>
       <span className="game-link-play"><PlayIcon />플레이</span>
     </Link>
   );
@@ -1046,11 +1045,11 @@ function GameLinkCard({ game }: { game: Game }) {
 
 /* ---------- About ---------- */
 
-const ACCESS_TIERS: { level: AccessLevel; title: string; text: string }[] = [
-  { level: "public", title: "공개", text: "누구나 로그인 없이 플레이" },
-  { level: "login", title: "로그인 데모", text: "Google 로그인하면 플레이" },
-  { level: "subscriber", title: "구독자 프로토타입", text: "YouTube 채널 구독자. 매주 몇 편은 모두에게 무료로 열려요." },
-  { level: "member", title: "멤버 얼리 액세스", text: "YouTube 채널 멤버가 가장 먼저 플레이" },
+/** `tier` picks the row color: the rotation shares the subscriber color with its badge. */
+const ACCESS_TIERS: { tier: AccessLevel | "subscriber"; title: string; text: string }[] = [
+  { tier: "public", title: "공개 · 데모", text: "누구나 로그인 없이 플레이" },
+  { tier: "subscriber", title: "주간 로테이션", text: "YouTube 채널 구독자. 매주 프로토타입의 30%가 바뀌어 가며 열려요." },
+  { tier: "member", title: "프로토타입", text: "YouTube 채널 멤버는 모든 프로토타입을 플레이" },
 ];
 
 function AboutPage() {
@@ -1079,7 +1078,7 @@ function AboutPage() {
       <section className="about-section">
         <h2>누가 어떤 게임을 할 수 있나요</h2>
         <ul className="tier-table">
-          {ACCESS_TIERS.map((tier) => <li key={tier.level} className={`tier-row ${tier.level}`}><span className="tier-dot" aria-hidden="true" /><strong>{tier.title}</strong><span>{tier.text}</span></li>)}
+          {ACCESS_TIERS.map((tier) => <li key={tier.tier} className={`tier-row ${tier.tier}`}><span className="tier-dot" aria-hidden="true" /><strong>{tier.title}</strong><span>{tier.text}</span></li>)}
         </ul>
       </section>
       <footer className="about-foot"><span>A small workshop by Material Stone Games</span><Link to="/privacy">개인정보처리방침</Link></footer>

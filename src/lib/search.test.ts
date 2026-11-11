@@ -4,7 +4,7 @@ import { filterGames, popularGenres } from "./search";
 import { pushRecent } from "./recent";
 
 function game(id: string, title: string, genres: string[]): Game {
-  return { id, title, titleKey: title.toLowerCase(), description: "", genres, accessLevel: "public", buildVersionId: "v", buildStatus: "published", likeCount: 0 };
+  return { id, title, titleKey: title.toLowerCase(), description: "", genres, accessLevel: "public", stage: "release", buildVersionId: "v", buildStatus: "published", likeCount: 0 };
 }
 
 const games = [

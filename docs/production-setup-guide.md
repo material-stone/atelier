@@ -179,7 +179,7 @@ Google 로그인은 현재 코드에서 popup 방식으로 실행됩니다. Fire
    ```
 
 6. 테스트 단계에서는 Test users에 운영자와 QA 계정을 등록합니다.
-7. 운영 공개 전에 Google OAuth 검토·검증이 필요한지 확인하고, 미검증 상태의 사용자 경고가 남아 있지 않도록 처리합니다.
+7. `youtube.readonly`는 민감한 범위라 검증 전에는 "확인되지 않은 앱" 경고가 뜹니다. [oauth-verification.md](oauth-verification.md)의 절차로 검증을 신청합니다.
 8. 앱의 개인정보처리방침 URL, 문의 방법, Google/YouTube 데이터 사용 목적을 준비합니다.
 
 구독 검증은 사용자가 게임 페이지에서 다시 권한을 승인하면 Functions가 `subscriptions.list`를 `mine=true`와 Material Stone 채널 ID로 호출하는 방식입니다. 이 API는 인증된 사용자의 구독 목록을 조회하는 용도이므로 [YouTube subscriptions.list 공식 문서](https://developers.google.com/youtube/v3/docs/subscriptions/list)의 파라미터와 OAuth 요구사항을 확인합니다.

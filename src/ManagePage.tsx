@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import type { AccessLevel, Game, StorageReport } from "./types";
-import { accessShortLabel, parseEmailList } from "./lib/access";
+import type { AccessLevel, Game, GameStage, StorageReport } from "./types";
+import { accessShortLabel, parseEmailList, stageLabel } from "./lib/access";
 import { filterGames } from "./lib/search";
 import {
   createOrUpdateGameDraft,
@@ -24,13 +24,20 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "storage", label: "저장 공간" },
 ];
 
+const STAGE_OPTIONS: { value: GameStage; label: string }[] = [
+  { value: "release", label: "공개" },
+  { value: "demo", label: "데모" },
+  { value: "prototype", label: "프로토타입" },
+];
+
 const ACCESS_OPTIONS: { value: AccessLevel; label: string }[] = [
-  { value: "public", label: "공개 — 누구나" },
-  { value: "login", label: "로그인 데모 — Google 로그인" },
-  { value: "subscriber", label: "구독자 프로토타입 — YouTube 구독자 (주간 무료 로테이션 대상)" },
-  { value: "member", label: "멤버 얼리 액세스 — 채널 멤버" },
+  { value: "public", label: "누구나 — 로그인 없이" },
+  { value: "member", label: "멤버 — 채널 멤버 (매주 30%는 구독자에게 로테이션)" },
   { value: "private", label: "초대 — 초대한 이메일만" },
 ];
+
+/** The access a stage usually comes with, applied when the stage changes; it can still be changed by hand. */
+const STAGE_ACCESS: Record<GameStage, AccessLevel> = { release: "public", demo: "public", prototype: "member" };
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -112,7 +119,7 @@ function GameList({ games, onEdit, onDelete, onAdd }: { games: Game[]; onEdit: (
                 <span className="manage-thumb" style={game.coverUrl ? { backgroundImage: `url(${game.coverUrl})` } : undefined} aria-hidden="true" />
                 <span className="manage-item-copy">
                   <strong>{game.title}</strong>
-                  <span>{accessShortLabel(game.accessLevel)} · {buildStatusLabel(game)}{game.genres.length ? ` · ${game.genres.map((genre) => `#${genre}`).join(" ")}` : ""}</span>
+                  <span>{stageLabel(game.stage)} · {accessShortLabel(game.accessLevel)} · {buildStatusLabel(game)}{game.genres.length ? ` · ${game.genres.map((genre) => `#${genre}`).join(" ")}` : ""}</span>
                   {game.buildError ? <span className="manage-error">빌드 오류: {game.buildError}</span> : null}
                 </span>
                 <ChevronRightIcon />
@@ -133,6 +140,7 @@ interface MetaState {
   description: string;
   genres: string;
   accessLevel: AccessLevel;
+  stage: GameStage;
   allowedEmails: string;
 }
 
@@ -154,6 +162,13 @@ function MetaFields({ value, onChange, idPrefix, extra }: { value: MetaState; on
         <label htmlFor={`${idPrefix}-genres`}>장르 태그</label>
         <input id={`${idPrefix}-genres`} value={value.genres} onChange={(event) => set("genres", event.target.value)} placeholder="아케이드, 퍼즐, 캐주얼" />
         <span className="field-hint">쉼표로 구분해 최대 8개. 홈의 장르 태그 검색에 쓰여요.</span>
+      </div>
+      <div className="field-group">
+        <label htmlFor={`${idPrefix}-stage`}>단계</label>
+        <select id={`${idPrefix}-stage`} value={value.stage} onChange={(event) => { const stage = event.target.value as GameStage; onChange({ ...value, stage, accessLevel: value.accessLevel === "private" ? "private" : STAGE_ACCESS[stage] }); }}>
+          {STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <span className="field-hint">게임에 붙는 표시예요. 바꾸면 공개 범위도 그 단계의 기본값으로 바뀌어요.</span>
       </div>
       <div className="field-group">
         <label htmlFor={`${idPrefix}-access`}>공개 범위</label>
@@ -210,7 +225,7 @@ function checkMeta(meta: MetaState): { error: string } | { emails?: string[] } {
 /* ---------- Edit ---------- */
 
 function GameEditor({ game, onBack, onDelete, onNotify }: { game: Game; onBack: () => void; onDelete: () => void; onNotify: Notify }) {
-  const [meta, setMeta] = useState<MetaState>({ title: game.title, description: game.description, genres: game.genres.join(", "), accessLevel: game.accessLevel, allowedEmails: "" });
+  const [meta, setMeta] = useState<MetaState>({ title: game.title, description: game.description, genres: game.genres.join(", "), accessLevel: game.accessLevel, stage: game.stage, allowedEmails: "" });
   const [cover, setCover] = useState<File | null>(null);
   const [build, setBuild] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -233,7 +248,7 @@ function GameEditor({ game, onBack, onDelete, onNotify }: { game: Game; onBack: 
     if ("error" in checked) return onNotify(checked.error);
     if (cover) { const error = validateImage(cover); if (error) return onNotify(error); }
     if (build) { const error = validateBuild(build); if (error) return onNotify(error); }
-    const fields = { title: meta.title.trim(), description: meta.description.trim(), genres: splitGenres(meta.genres), accessLevel: meta.accessLevel, allowedEmails: checked.emails };
+    const fields = { title: meta.title.trim(), description: meta.description.trim(), genres: splitGenres(meta.genres), accessLevel: meta.accessLevel, stage: meta.stage, allowedEmails: checked.emails };
     setSaving(true);
     try {
       // Text first: it also rejects a title another game already uses.
@@ -295,7 +310,7 @@ function GameEditor({ game, onBack, onDelete, onNotify }: { game: Game; onBack: 
 
 /* ---------- Add ---------- */
 
-const EMPTY_META: MetaState = { title: "", description: "", genres: "", accessLevel: "public", allowedEmails: "" };
+const EMPTY_META: MetaState = { title: "", description: "", genres: "", accessLevel: "public", stage: "release", allowedEmails: "" };
 
 function NewGameForm({ onDone, onNotify }: { onDone: () => void; onNotify: Notify }) {
   const [meta, setMeta] = useState<MetaState>(EMPTY_META);
@@ -327,7 +342,7 @@ function NewGameForm({ onDone, onNotify }: { onDone: () => void; onNotify: Notif
     setSaving(true);
     try {
       setProgress("업로드 준비 중…");
-      const draft = await createOrUpdateGameDraft({ title: meta.title.trim(), description: meta.description.trim(), genres: splitGenres(meta.genres), accessLevel: meta.accessLevel, allowedEmails: checked.emails, existingGameId: existing?.id });
+      const draft = await createOrUpdateGameDraft({ title: meta.title.trim(), description: meta.description.trim(), genres: splitGenres(meta.genres), accessLevel: meta.accessLevel, stage: meta.stage, allowedEmails: checked.emails, existingGameId: existing?.id });
       await uploadFile(draft.coverPath, cover, (value) => setProgress(`커버 이미지 업로드 중… ${Math.round(value * 100)}%`));
       await uploadFile(draft.buildPath, build, (value) => setProgress(`빌드 업로드 중… ${Math.round(value * 100)}%`));
       onNotify("업로드했어요. 서버에서 ZIP을 검사한 뒤 공개돼요.");

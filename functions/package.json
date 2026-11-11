@@ -10,7 +10,8 @@
     "lint": "tsc --noEmit",
     "set-admin": "node scripts/set-admin.mjs",
     "set-member": "node scripts/set-member.mjs",
-    "migrate-gallery": "node scripts/migrate-from-gallery.mjs"
+    "migrate-gallery": "node scripts/migrate-from-gallery.mjs",
+    "migrate-stages": "node scripts/migrate-stages.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",

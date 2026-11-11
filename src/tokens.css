@@ -105,7 +105,6 @@
 
   /* ---- Semantic: access tiers ---- */
   --tier-public: var(--moss-700);
-  --tier-login: var(--ink-500);
   --tier-subscriber: var(--gem-700);
   --tier-member: var(--violet-700);
   --tier-private: var(--ember-700);
@@ -151,7 +150,6 @@
   --success: var(--moss-400);
   --danger: var(--red-400);
   --tier-public: var(--moss-400);
-  --tier-login: var(--mist-400);
   --tier-subscriber: var(--gem-300);
   --tier-member: var(--violet-300);
   --tier-private: var(--ember-400);
@@ -185,7 +183,6 @@
     --success: var(--moss-400);
     --danger: var(--red-400);
     --tier-public: var(--moss-400);
-    --tier-login: var(--mist-400);
     --tier-subscriber: var(--gem-300);
     --tier-member: var(--violet-300);
     --tier-private: var(--ember-400);

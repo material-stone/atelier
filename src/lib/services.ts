@@ -31,7 +31,7 @@ import type {
   TargetType,
   UserProfile,
 } from "../types";
-import { LISTED_ACCESS_LEVELS, isAccessLevel } from "./access";
+import { LISTED_STORED_LEVELS, defaultStage, isGameStage, normalizeAccessLevel } from "./access";
 import { appConfig, hasFirebaseConfig } from "./config";
 import { trackGameView } from "./gameViews";
 import { auth, db, functions, storage } from "./firebase";
@@ -140,7 +140,8 @@ function mapGame(snapshot: { id: string; data: () => Record<string, unknown> | u
     description: String(data.description ?? ""),
     coverPath: typeof data.coverPath === "string" ? data.coverPath : undefined,
     genres: Array.isArray(data.genres) ? data.genres.map(String) : [],
-    accessLevel: isAccessLevel(data.accessLevel) ? data.accessLevel : "public",
+    accessLevel: normalizeAccessLevel(data.accessLevel) ?? "private",
+    stage: isGameStage(data.stage) ? data.stage : defaultStage(data.accessLevel),
     buildVersionId: String(data.buildVersionId ?? ""),
     buildStatus: data.buildStatus === "failed" || data.buildStatus === "processing" ? data.buildStatus : "published",
     buildRoot: typeof data.buildRoot === "string" ? data.buildRoot : undefined,
@@ -214,7 +215,7 @@ export function subscribeToGames(callback: (games: Game[]) => void): () => void 
   const gamesQuery = query(
     collection(db, "games"),
     where("buildStatus", "==", "published"),
-    where("accessLevel", "in", LISTED_ACCESS_LEVELS),
+    where("accessLevel", "in", LISTED_STORED_LEVELS),
     orderBy("updatedAt", "desc"),
   );
   const unsubscribeGames = onSnapshot(gamesQuery, async (snapshot) => {

@@ -57,7 +57,7 @@ ZIP은 저장소에 커밋하지 않도록 임시 폴더나 `.gitignore`에 포�
 
 - 사용자가 게임 이름을 말하면 `--title "<제목>"`을 쓴다. 같은 제목이 있으면 그 게임을 업데이트하고, 없으면 새로 만든다.
 - 확실하지 않으면 `--dry-run`으로 요청 내용을 보여 주고 사용자에게 확인한다.
-- **새 게임**에는 필요한 것을 사용자에게 확인한다: 제목, 접근 등급(`public` | `login` | `subscriber` | `member` | `private`), 표지 이미지(JPG/PNG/WebP, 5MB 이하, 필수), 설명, 장르. 접근 등급과 표지는 추측하지 않는다.
+- **새 게임**에는 필요한 것을 사용자에게 확인한다: 제목, 단계(`--stage`: `release` 공개 | `demo` 데모 | `prototype` 프로토타입), 접근 등급(`--access`: `public` 누구나 | `member` 채널 멤버, 매주 30%는 구독자에게 로테이션 | `private` 초대), 표지 이미지(JPG/PNG/WebP, 5MB 이하, 필수), 설명, 장르. 단계·접근 등급·표지는 추측하지 않는다. 보통 공개·데모는 `public`, 프로토타입은 `member`다. `login`·`subscriber` 등급은 없어졌다.
 - **업데이트**는 보통 ZIP 경로와 `--title`(또는 `--game <id>`)만 있으면 된다. 생략한 게임 정보는 그대로 유지된다. 사용자가 바꾸라고 한 항목만 넘긴다. 바꾼 값은 새 빌드가 공개될 때 함께 반영된다.
 
 ## 5. 올리기
@@ -67,7 +67,7 @@ ZIP은 저장소에 커밋하지 않도록 임시 폴더나 `.gitignore`에 포�
 atelier-cli upload build.zip --title "Ember Archive"
 
 # 새 게임
-atelier-cli upload build.zip --title "Ember Archive" --access public --cover cover.png --genres "Adventure,Puzzle" --description "조작: 방향키로 이동\n스페이스: 점프"
+atelier-cli upload build.zip --title "Ember Archive" --stage release --access public --cover cover.png --genres "Adventure,Puzzle" --description "조작: 방향키로 이동\n스페이스: 점프"
 ```
 
 - 업로드와 서버 처리(최대 몇 분)를 기다리므로 Bash 기본 제한 시간을 넘을 수 있다. 큰 파일은 백그라운드로 실행하고 끝나면 결과를 확인한다.

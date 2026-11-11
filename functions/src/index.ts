@@ -10,7 +10,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { logger } from "firebase-functions";
 import mime from "mime-types";
 import unzipper from "unzipper";
-import { type AccessLevel, isAccessLevel, normalizeEmailList, weeklyRotationIds } from "./access.js";
+import { type AccessLevel, defaultStage, isGameStage, normalizeAccessLevel, normalizeEmailList, weeklyRotationIds } from "./access.js";
 import { bearerToken, hashSecret, keyPreview, newApiKey, newPollToken, newUserCode, normalizeUserCode, sameDigest } from "./apiKey.js";
 import { DIRECT_ASSET_CACHE_CONTROL, isDirectAsset, signedUrlWindow } from "./delivery.js";
 import { monthKeyBefore, pageMonthKey } from "./month.js";
@@ -102,7 +102,7 @@ function readSessionToken(value: string): { gameId: string; versionId: string; u
   if (expected.length !== signature.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) return null;
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as { gameId: string; versionId: string; uid: string | null; level: AccessLevel; expiresAt: number };
-    if (!payload.gameId || !payload.versionId || !payload.expiresAt || payload.expiresAt < Date.now() || !isAccessLevel(payload.level)) return null;
+    if (!payload.gameId || !payload.versionId || !payload.expiresAt || payload.expiresAt < Date.now() || !normalizeAccessLevel(payload.level)) return null;
     return payload;
   } catch {
     return null;
@@ -119,7 +119,7 @@ async function userStatus(uid: string): Promise<{ subscriber: boolean; member: b
 }
 
 async function inWeeklyRotation(gameId: string): Promise<boolean> {
-  const snapshot = await db.collection("games").where("buildStatus", "==", "published").where("accessLevel", "==", "subscriber").select().get();
+  const snapshot = await db.collection("games").where("buildStatus", "==", "published").where("accessLevel", "in", ["member", "subscriber"]).select().get(); // "subscriber" until migrate-stages runs
   return weeklyRotationIds(snapshot.docs.map((doc) => doc.id)).has(gameId);
 }
 
@@ -147,25 +147,33 @@ async function canSeeGame(game: DocumentSnapshot<DocumentData>, auth: CallableRe
   return onAllowlist(game.id, auth);
 }
 
+/** A game's access level, with retired levels read as their new ones and anything unknown kept private. */
+function gameAccessLevel(game: DocumentSnapshot<DocumentData>): AccessLevel {
+  return normalizeAccessLevel(game.get("accessLevel")) ?? "private";
+}
+
 async function canPlay(game: DocumentSnapshot<DocumentData>, request: CallableRequest<unknown>): Promise<boolean> {
-  const level = game.get("accessLevel") as AccessLevel;
+  const level = gameAccessLevel(game);
   if (level === "public") return true;
   if (level === "private") return request.auth ? canSeeGame(game, request.auth) : false;
-  if (level === "subscriber" && (await inWeeklyRotation(game.id))) return true;
   if (!request.auth) return false;
-  if (request.auth.token.admin === true || level === "login") return true;
+  if (request.auth.token.admin === true) return true;
   const status = await userStatus(request.auth.uid);
-  return level === "member" ? status.member : status.subscriber || status.member;
+  if (status.member) return true;
+  // Subscribers play this week's rotation of member games.
+  return status.subscriber && (await inWeeklyRotation(game.id));
 }
 
 function readGameMeta(data: Record<string, unknown>) {
   const title = typeof data.title === "string" ? data.title.trim() : "";
   const description = typeof data.description === "string" ? data.description.trim() : "";
   const genres = Array.isArray(data.genres) ? data.genres.filter((genre): genre is string => typeof genre === "string").map((genre) => genre.trim()).filter(Boolean).slice(0, 8) : [];
-  const accessLevel = isAccessLevel(data.accessLevel) ? data.accessLevel : null;
+  const accessLevel = normalizeAccessLevel(data.accessLevel);
+  // Older clients send no stage; "login" there meant a demo.
+  const stage = isGameStage(data.stage) ? data.stage : defaultStage(data.accessLevel);
   if (!title || title.length > 80 || !accessLevel) throw new HttpsError("invalid-argument", "게임 제목과 접근 등급을 확인해 주세요.");
   if (description.length > MAX_DESCRIPTION_LENGTH) throw new HttpsError("invalid-argument", `설명은 ${MAX_DESCRIPTION_LENGTH}자 이하로 작성해 주세요.`);
-  return { title, titleKey: normalizeTitle(title), description, genres, accessLevel };
+  return { title, titleKey: normalizeTitle(title), description, genres, accessLevel, stage };
 }
 
 function readAllowedEmails(data: Record<string, unknown>, accessLevel: AccessLevel): string[] | null {
@@ -188,7 +196,8 @@ export const verifyYoutubeSubscription = onCall({ region: "asia-northeast3", enf
   if (!accessToken || !channelId) throw new HttpsError("failed-precondition", "YouTube 채널 ID 또는 권한 동의가 설정되지 않았습니다.");
 
   const url = new URL("https://www.googleapis.com/youtube/v3/subscriptions");
-  url.searchParams.set("part", "snippet");
+  // Only whether a subscription exists matters, so ask for ids and nothing about the channel or the viewer.
+  url.searchParams.set("part", "id");
   url.searchParams.set("mine", "true");
   url.searchParams.set("forChannelId", channelId);
   const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -319,8 +328,9 @@ async function mergedGameInput(body: Record<string, unknown>, existing: Document
     description: existing.get("description") ?? "",
     genres: existing.get("genres") ?? [],
     accessLevel: existing.get("accessLevel"),
+    stage: isGameStage(existing.get("stage")) ? existing.get("stage") : defaultStage(existing.get("accessLevel")),
   };
-  for (const key of ["title", "description", "genres", "accessLevel", "allowedEmails"]) {
+  for (const key of ["title", "description", "genres", "accessLevel", "stage", "allowedEmails"]) {
     if (body[key] !== undefined) merged[key] = body[key];
   }
   if (merged.allowedEmails === undefined && merged.accessLevel === "private") {
@@ -408,7 +418,8 @@ async function apiGameStatus(gameId: string) {
   return {
     gameId,
     title: game.get("title") ?? "",
-    accessLevel: game.get("accessLevel") ?? null,
+    accessLevel: normalizeAccessLevel(game.get("accessLevel")),
+    stage: isGameStage(game.get("stage")) ? game.get("stage") : defaultStage(game.get("accessLevel")),
     buildStatus: game.get("buildStatus") ?? null,
     buildVersionId: game.get("buildVersionId") ?? null,
     pendingVersionId: game.get("pendingVersionId") ?? null,
@@ -775,7 +786,7 @@ export const getPlaySession = onCall({ region: "asia-northeast3", enforceAppChec
   const game = await db.doc(`games/${gameId}`).get();
   if (!game.exists || game.get("buildStatus") !== "published" || !(await canSeeGame(game, request.auth))) throw new HttpsError("not-found", "아직 공개되지 않은 빌드입니다.");
   if (!(await canPlay(game, request))) throw new HttpsError("permission-denied", "현재 계정에는 이 빌드를 플레이할 권한이 없습니다.");
-  const level = game.get("accessLevel") as AccessLevel;
+  const level = gameAccessLevel(game);
   const token = createSessionToken({ gameId, versionId: String(game.get("buildVersionId")), uid: request.auth?.uid ?? null, level, expiresAt: Date.now() + 2 * 60 * 60 * 1000 });
   const path = `/s/${token}/g/${encodeURIComponent(gameId)}/index.html`;
   const base = FUNCTIONS_BASE_URL.value().replace(/\/$/, "");
