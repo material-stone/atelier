@@ -34,6 +34,7 @@ import {
   toggleLike,
   uploadBoardImage,
   verifyYoutubeSubscription,
+  clearYoutubeVerification,
 } from "./lib/services";
 import {
   MAX_COMMENT_LENGTH,
@@ -191,7 +192,18 @@ function useSubscriptionCheck(auth: AuthState, onNotify: Notify) {
       setVerifying(false);
     }
   }
-  return { verifying, verify };
+  async function clear() {
+    setVerifying(true);
+    try {
+      await clearYoutubeVerification();
+      onNotify("구독 확인을 해제했어요. 동의 화면부터 다시 보려면 Google 계정에서 Atelier 권한도 해제하세요.");
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "구독 확인을 해제하지 못했습니다.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+  return { verifying, verify, clear };
 }
 
 function initialOf(name: string): string {
@@ -238,7 +250,7 @@ function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onCl
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<SettingsTab>("general");
   const handleAuth = useAuthAction(auth, onNotify);
-  const { verifying, verify } = useSubscriptionCheck(auth, onNotify);
+  const { verifying, verify, clear: clearVerification } = useSubscriptionCheck(auth, onNotify);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -284,8 +296,11 @@ function SettingsDialog({ open, onClose, auth, theme, onTheme, recentCount, onCl
                   <div className="setting-copy"><strong>{name}</strong><p>Google 계정으로 로그인됨 · 댓글과 글에 이 이름이 보여요</p></div>
                 </div>
                 <div className="setting-row">
-                  <div className="setting-copy"><strong>YouTube 구독 <span className={`status-badge${auth.isSubscriber ? " is-on" : ""}`}>{auth.isSubscriber ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isSubscriber ? "매주 바뀌는 로테이션 프로토타입을 플레이할 수 있어요." : "채널을 구독한 뒤 확인하면 매주 바뀌는 프로토타입이 열려요."}</p></div>
-                  <button className="button button-quiet small" type="button" onClick={verify} disabled={verifying}>{verifying ? "확인 중…" : auth.isSubscriber ? "다시 확인" : "구독 확인"}</button>
+                  <div className="setting-copy"><strong>YouTube 구독 <span className={`status-badge${auth.isSubscriber ? " is-on" : ""}`}>{auth.isSubscriber ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isSubscriber ? "매주 바뀌는 로테이션 프로토타입을 플레이할 수 있어요." : "채널을 구독한 뒤 확인하면 매주 바뀌는 프로토타입이 열려요."} <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">Google 권한 관리 ↗</a></p></div>
+                  <div className="setting-actions">
+                    {auth.isSubscriber ? <button className="button button-quiet small" type="button" onClick={clearVerification} disabled={verifying}>확인 해제</button> : null}
+                    <button className="button button-quiet small" type="button" onClick={verify} disabled={verifying}>{verifying ? "확인 중…" : auth.isSubscriber ? "다시 확인" : "구독 확인"}</button>
+                  </div>
                 </div>
                 <div className="setting-row">
                   <div className="setting-copy"><strong>채널 멤버십 <span className={`status-badge${auth.isMember ? " is-on" : ""}`}>{auth.isMember ? "확인됨" : "확인 안 됨"}</span></strong><p>{auth.isMember ? "모든 프로토타입을 플레이할 수 있어요." : "운영자가 멤버십을 확인하면 모든 프로토타입이 열려요."}</p></div>

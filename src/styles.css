@@ -109,6 +109,8 @@ p, h1, h2, .bubble, .post-text { word-break: keep-all; overflow-wrap: anywhere; 
 .setting-copy { flex: 1 1 220px; min-width: 0; }
 .setting-copy strong { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; }
 .setting-copy p { margin: 4px 0 0; color: var(--color-text-muted); font-size: var(--fs-small); line-height: 1.55; }
+.setting-copy p a { color: var(--accent); white-space: nowrap; }
+.setting-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .status-badge { padding: 2px 8px; border-radius: var(--radius-pill); background: var(--color-surface-raised); color: var(--color-text-muted); font-size: var(--fs-caption); font-weight: 500; }
 .status-badge.is-on { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
 .avatar-large { width: 44px; height: 44px; font-size: 16px; }
