@@ -98,13 +98,12 @@ Atelier의 색, 글자, 화면 구성 규칙입니다. 값은 모두 [`src/token
 
 ### 접근 등급 색
 
-게임 태그와 소개 화면 표는 등급마다 같은 색을 씁니다. 등급 색은 `--tier`라는 지역 변수로 넘깁니다.
+게임 태그와 소개 화면 표는 등급마다 같은 색을 씁니다. 단계 태그(공개·데모·프로토타입)는 색 없는 기본 태그입니다. 등급 색은 `--tier`라는 지역 변수로 넘깁니다.
 
 | 등급 | 토큰 | 색 |
 |---|---|---|
 | 공개(public) | `--tier-public` | moss 초록 |
-| 로그인 데모(login) | `--tier-login` | ink 회색 |
-| 구독자 프로토타입(subscriber) | `--tier-subscriber` | gem 파랑 |
+| 이번 주 구독자 로테이션 | `--tier-subscriber` | gem 파랑 |
 | 채널 멤버(member) | `--tier-member` | violet |
 | 초대(private) | `--tier-private` | ember |
 

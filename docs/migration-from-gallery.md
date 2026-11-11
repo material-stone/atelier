@@ -65,7 +65,7 @@ npm --prefix functions run migrate-gallery -- --source-key=... --target-project=
 ```
 
 - 이미 대상에 있는 사용자·게임은 건너뛰므로 다시 실행해도 안전합니다.
-- 모든 게임을 공개로 옮기려면 `--default-access=public`을 붙입니다. 기본은 원조처럼 `subscriber`(주간 로테이션 + 구독자)입니다.
+- 모든 게임을 공개로 옮기려면 `--default-access=public`을 붙입니다. 기본은 `member`(프로토타입, 매주 30%는 구독자에게 로테이션)입니다.
 - 실행 후 관리자 계정에 claim을 부여합니다: `npm --prefix functions run set-admin -- <관리자 email>`.
 - 관리 → 게임 목록에서 6개 게임이 `PUBLISHED`가 되는지, 각 게임이 실제로 플레이되는지 확인합니다.
 

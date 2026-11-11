@@ -34,7 +34,8 @@ upload — 게임 지정 (둘 중 하나, 둘 다 없으면 새 게임):
 upload — 게임 정보 (기존 게임에서 생략하면 지금 값 유지, 바꾼 값은 새 빌드가 공개될 때 반영):
   --description <글>     설명 (500자 이하, \\n 줄바꿈 가능)
   --genres <a,b,c>       장르 태그, 쉼표로 구분 (최대 8개)
-  --access <등급>        public | login | subscriber | member | private
+  --stage <단계>         release(공개) | demo(데모) | prototype(프로토타입). 새 게임에서 생략하면 등급에 맞춰 정함
+  --access <등급>        public(누구나) | member(멤버, 매주 30%는 구독자에게) | private(초대)
   --emails <a@b,c@d>     private 게임의 초대 이메일
   --cover <이미지>       JPG/PNG/WebP, 5MB 이하. 새 게임은 필수
 
@@ -56,7 +57,8 @@ const MAX_ZIP_BYTES = 250 * 1024 * 1024;
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const CHUNK_BYTES = 8 * 1024 * 1024; // must be a multiple of 256 KiB
 const COVER_TYPES = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp" };
-const ACCESS_LEVELS = ["public", "login", "subscriber", "member", "private"];
+const ACCESS_LEVELS = ["public", "member", "private"];
+const STAGES = ["release", "demo", "prototype"];
 // Cloud Storage keeps a resumable session for a week; stop resuming a little before that.
 const STATE_MAX_AGE_MS = 6 * 24 * 60 * 60 * 1000;
 const HOME_DIR = join(homedir(), ".atelier-cli");
@@ -378,6 +380,7 @@ async function main() {
       description: { type: "string" },
       genres: { type: "string" },
       access: { type: "string" },
+      stage: { type: "string" },
       emails: { type: "string" },
       cover: { type: "string" },
       cancel: { type: "boolean", default: false },
@@ -436,7 +439,10 @@ async function upload(zipPath, values, requireKey) {
     if (size > MAX_COVER_BYTES) fail(`대표 이미지는 5MB 이하만 올릴 수 있습니다. (현재 ${formatBytes(size)})`);
     cover = { size, contentType };
   }
+  if (values.access === "login") fail("login 등급은 없어졌습니다. 데모는 --stage demo --access public으로 올려 주세요.");
+  if (values.access === "subscriber") fail("subscriber 등급은 없어졌습니다. 프로토타입은 --access member로 올리면 매주 일부가 구독자에게 열립니다.");
   if (values.access && !ACCESS_LEVELS.includes(values.access)) fail(`--access는 ${ACCESS_LEVELS.join(" | ")} 중 하나입니다.`);
+  if (values.stage && !STAGES.includes(values.stage)) fail(`--stage는 ${STAGES.join(" | ")} 중 하나입니다.`);
 
   const body = { build: { size: zipSize, contentType: "application/zip" } };
   if (cover) body.cover = cover;
@@ -445,6 +451,7 @@ async function upload(zipPath, values, requireKey) {
   if (values.description !== undefined) body.description = values.description.replace(/\\n/g, "\n");
   if (values.genres !== undefined) body.genres = values.genres.split(",").map((genre) => genre.trim()).filter(Boolean).slice(0, 8);
   if (values.access) body.accessLevel = values.access;
+  if (values.stage) body.stage = values.stage;
   if (values.emails !== undefined) body.allowedEmails = values.emails.split(/[,\s]+/).filter(Boolean);
 
   console.log(`ZIP: ${basename(zipPath)} (${formatBytes(zipSize)})${cover ? `, 표지: ${basename(values.cover)}` : ""}`);

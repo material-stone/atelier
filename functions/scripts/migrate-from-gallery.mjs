@@ -96,7 +96,7 @@ async function migrateGames() {
     }
     const cover = sourceBucket.file(`thumbnails/${gameId}`);
     const [hasCover] = await cover.exists();
-    const accessLevel = data.earlyAccess ? "member" : String(args["default-access"] ?? "subscriber");
+    const accessLevel = data.earlyAccess ? "member" : String(args["default-access"] ?? "member");
     const versionId = randomUUID();
     report.push(`  ${label}: ${accessLevel}, build ${zip.name}${hasCover ? ", cover" : ", no cover"}`);
     if (!apply) continue;
@@ -112,6 +112,7 @@ async function migrateGames() {
       description: data.description ?? "",
       genres: Array.isArray(data.tags) ? data.tags.slice(0, 8) : [],
       accessLevel,
+      stage: "prototype",
       coverPath: `game-covers/${gameId}/cover`,
       buildVersionId: versionId,
       buildStatus: "processing",

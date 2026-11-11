@@ -231,7 +231,6 @@ p, h1, h2, .bubble, .post-text { word-break: keep-all; overflow-wrap: anywhere; 
 .tag { padding: 4px 10px; border-radius: var(--radius-pill); background: var(--color-bg); color: var(--accent); font-size: var(--fs-small); }
 .access-tag { --tier: var(--color-text-muted); color: var(--tier); }
 .access-tag.public { --tier: var(--tier-public); }
-.access-tag.login { --tier: var(--tier-login); }
 .access-tag.subscriber { --tier: var(--tier-subscriber); }
 .access-tag.member { --tier: var(--tier-member); }
 .access-tag.private { --tier: var(--tier-private); }
@@ -333,7 +332,6 @@ p, h1, h2, .bubble, .post-text { word-break: keep-all; overflow-wrap: anywhere; 
 .tier-row > span:last-child { flex: 1 1 220px; color: var(--color-text-soft); font-size: var(--fs-body-sm); }
 .tier-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--tier, var(--color-text-muted)); }
 .tier-row.public { --tier: var(--tier-public); }
-.tier-row.login { --tier: var(--tier-login); }
 .tier-row.subscriber { --tier: var(--tier-subscriber); }
 .tier-row.member { --tier: var(--tier-member); }
 .about-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding-top: 20px; border-top: 1px solid var(--color-line); color: var(--color-text-muted); font-size: var(--fs-small); }
