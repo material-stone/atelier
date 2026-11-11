@@ -119,6 +119,21 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
     setSettingsOpen(true);
   }, []);
 
+  // Right after a sign-in in this tab, point players who are not yet verified at this week's rotation.
+  const rotation = useMemo(() => rotationForGames(games), [games]);
+  const { verifying, verify } = useSubscriptionCheck(auth, notify);
+  const [subscribePrompt, setSubscribePrompt] = useState(false);
+  const settledUid = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (auth.loading) return;
+    const uid = auth.user?.uid ?? null;
+    const previous = settledUid.current;
+    settledUid.current = uid;
+    if (!uid) setSubscribePrompt(false);
+    else if (previous === null) setSubscribePrompt(!auth.isSubscriber && !auth.isMember && !auth.isAdmin);
+  }, [auth]);
+  const showSubscribePrompt = subscribePrompt && rotation.size > 0 && !auth.isSubscriber;
+
   const markPlayed = useCallback((gameId: string) => {
     setRecent((list) => {
       if (list[0] === gameId) return list;
@@ -135,6 +150,13 @@ function AppShell({ auth, games, posts }: { auth: AuthState; games: Game[]; post
       <Sidebar auth={auth} games={games} recent={recent} open={drawerOpen} onClose={() => setDrawerOpen(false)} onSettings={openSettings} onNotify={notify} />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} auth={auth} theme={theme} onTheme={setTheme} recentCount={recent.length} onClearRecent={clearRecent} onNotify={notify} />
       <main className="app-main">
+        {showSubscribePrompt ? (
+          <div className="callout subscribe-prompt" role="region" aria-label="YouTube 구독 확인 안내">
+            <div><strong>YouTube 구독자라면 지금 확인하세요</strong><p>이번 주 구독자에게 열린 프로토타입이 {rotation.size}개 있어요. 한 번 확인하면 다음 주 월요일까지 유지돼요.</p></div>
+            <button className="button button-primary small" type="button" onClick={() => void verify()} disabled={verifying}>{verifying ? "확인 중…" : "구독 확인"}</button>
+            <button className="button button-quiet small" type="button" onClick={() => setSubscribePrompt(false)}>나중에</button>
+          </div>
+        ) : null}
         <Routes>
           <Route path="/" element={<HomePage games={games} />} />
           <Route path="/game/:gameId" element={<GameRoute auth={auth} games={games} onNotify={notify} onPlayed={markPlayed} />} />
@@ -185,7 +207,7 @@ function useSubscriptionCheck(auth: AuthState, onNotify: Notify) {
     setVerifying(true);
     try {
       await verifyYoutubeSubscription();
-      onNotify("구독 확인이 완료되었습니다. 이제 프로토타입을 플레이할 수 있습니다.");
+      onNotify("구독이 확인됐어요. 다음 주 월요일까지 이번 주 프로토타입을 플레이할 수 있어요.");
     } catch (error) {
       onNotify(error instanceof Error ? error.message : "구독 확인에 실패했습니다.");
     } finally {

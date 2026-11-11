@@ -30,7 +30,7 @@ Google 로그인(이메일·프로필)만 쓰는 일반 로그인에는 이 경�
 
 **Scope justification — `youtube.readonly`**
 
-> Atelier is a web hub where Material Stone Games publishes playable game prototypes. Each week a rotating set of prototypes is unlocked for subscribers of the Material Stone YouTube channel. When a signed-in player clicks "Verify subscription", we request youtube.readonly and call `subscriptions.list` once with `mine=true` and `forChannelId` set to our own channel ID, to check whether this player subscribes to our channel. We store only the result (subscribed: yes/no and a 24-hour expiry). The access token is used for that single request on our server and is never stored. We do not read any other subscriptions, playlists, watch history or channel data. A narrower scope is not available: `subscriptions.list` with `mine=true` requires youtube.readonly.
+> Atelier is a web hub where Material Stone Games publishes playable game prototypes. Each week a rotating set of prototypes is unlocked for subscribers of the Material Stone YouTube channel. When a signed-in player clicks "Verify subscription", we request youtube.readonly and call `subscriptions.list` once with `mine=true` and `forChannelId` set to our own channel ID, to check whether this player subscribes to our channel. We store only the result (subscribed: yes/no and an expiry at the end of the current weekly rotation, at least 24 hours). The access token is used for that single request on our server and is never stored. We do not read any other subscriptions, playlists, watch history or channel data. A narrower scope is not available: `subscriptions.list` with `mine=true` requires youtube.readonly.
 
 **How the app uses Google user data**
 

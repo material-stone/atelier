@@ -50,6 +50,12 @@ export function weekIndex(date = new Date()): number {
 }
 
 // The first week of the 30% no-repeat rotation. Each week is derived from the one before, starting here.
+/** When a subscription check made at `date` lapses: the end of this rotation week (Monday 00:00 KST), but never sooner than 24 hours. */
+export function subscriptionCheckExpiry(date = new Date()): Date {
+  const weekEnd = (weekIndex(date) + 1) * WEEK_MS - KST_OFFSET_MS - MONDAY_SHIFT_MS;
+  return new Date(Math.max(weekEnd, date.getTime() + 24 * 60 * 60 * 1000));
+}
+
 const ROTATION_EPOCH_WEEK = weekIndex(new Date("2026-11-09T00:00:00+09:00"));
 
 function seededRandom(seed: number): () => number {

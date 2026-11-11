@@ -18,7 +18,7 @@ export function PrivacyPage() {
         <h2>1. 수집하는 정보</h2>
         <ul>
           <li><strong>Google 로그인 시</strong>: Google 계정 식별자(UID), 이메일 주소, 이름, 프로필 사진 주소.</li>
-          <li><strong>YouTube 구독 확인 시</strong>: Material Stone YouTube 채널 구독 여부와 확인 유효기간(24시간). YouTube 접근 토큰은 확인 요청 한 번에만 사용하며 저장하지 않습니다. 다른 구독 목록이나 시청 기록은 수집하지 않습니다.</li>
+          <li><strong>YouTube 구독 확인 시</strong>: Material Stone YouTube 채널 구독 여부와 확인 유효기간(그 주 로테이션이 끝나는 월요일 0시까지, 최소 24시간). YouTube 접근 토큰은 확인 요청 한 번에만 사용하며 저장하지 않습니다. 다른 구독 목록이나 시청 기록은 수집하지 않습니다.</li>
           <li><strong>커뮤니티 이용 시</strong>: 작성한 메모·댓글, 첨부 이미지, 좋아요 기록과 작성자 이름.</li>
           <li><strong>게임 플레이 시</strong>: 플레이 세션 발급 기록(게임, 계정 식별자, 만료 시각). 일부 게임은 최고 점수를 브라우저(localStorage)에만 저장하며 서버로 보내지 않습니다.</li>
           <li><strong>자동 수집</strong>: 서비스 운영을 위해 Google Cloud가 남기는 접속 로그(IP 주소, 요청 시각 등).</li>
@@ -40,7 +40,7 @@ export function PrivacyPage() {
         <ul>
           <li>계정 정보: 탈퇴(삭제 요청) 시까지</li>
           <li>커뮤니티 메모: 작성 월로부터 약 2개월 뒤 자동 삭제. 해당 월에 좋아요 10개 이상으로 가장 많은 메모 1개는 보존될 수 있습니다.</li>
-          <li>구독 확인 결과: 24시간 동안 유효하며, 다시 확인하면 갱신됩니다.</li>
+          <li>구독 확인 결과: 확인한 주의 로테이션이 끝나는 다음 월요일 0시(한국 시간)까지 유효하며(최소 24시간), 다시 확인하면 갱신됩니다.</li>
         </ul>
 
         <h2>4. 처리 위탁과 국외 이전</h2>
