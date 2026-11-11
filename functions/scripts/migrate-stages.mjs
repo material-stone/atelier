@@ -7,7 +7,9 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
 const apply = process.argv.includes("--apply");
-if (!getApps().length) initializeApp();
+// Without an explicit project, application default credentials can point at another project and read nothing.
+const projectId = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? "material-stone-atelier";
+if (!getApps().length) initializeApp({ projectId });
 const db = getFirestore();
 
 const STAGES = new Set(["release", "demo", "prototype"]);
