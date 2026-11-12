@@ -2,6 +2,14 @@
 
 Claude가 구현하면서 정한 설계와 그 이유입니다. 사용자가 정한 방향은 [user-decisions.md](user-decisions.md)에 있습니다.
 
+## 2026-11-12 · 전체화면 버튼 항상 표시
+
+### `disabled={!playing}` + 공통 `.round-button:disabled` 스타일
+
+- **결정:** `GameScreen` 헤더의 버튼을 늘 렌더링하고 빌드가 열리기 전(`playing`이 false)에는 `disabled`로 둔다. 비활성일 때 `title`은 "게임이 열리면 전체 화면을 쓸 수 있어요"로 바꾼다. 스타일은 `.round-button:disabled { opacity: 0.4; cursor: not-allowed; }`로 공통 규칙에 넣었다.
+- **이유:** `playing` 하나로 로딩·권한 없음·세션 실패를 모두 덮으므로 조건을 새로 만들 필요가 없다. 기존 hover 규칙이 이미 `:not(:disabled)`를 쓰고 있어 비활성 스타일만 빠져 있었다.
+- **대안:** 잠김/로딩마다 다른 툴팁을 주는 방법은 화면 안내 문구(`playScreenMessage`)가 이미 이유를 보여 줘서 하지 않았다. 전체화면 중 헤더를 숨기는 동작은 그대로 둔다.
+
 ## 2026-11-11 · OAuth 데모 영상·자막 보관
 
 ### 자막은 저장소에, 영상은 gitignore된 `media/`에
