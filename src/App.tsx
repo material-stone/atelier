@@ -775,7 +775,8 @@ function GameScreen({ gameId, header, playing, playUrl, message, locked, playerR
       {fullscreen ? null : (
         <div className="game-card-head">
           {header}
-          {playing ? <button className="round-button" type="button" onClick={enterFullscreen} aria-label="전체 화면" title="전체 화면"><FullscreenIcon /></button> : null}
+          {/* Always shown so the header doesn't shift; it only works once a build is running. */}
+          <button className="round-button" type="button" onClick={enterFullscreen} disabled={!playing} aria-label="전체 화면" title={playing ? "전체 화면" : "게임이 열리면 전체 화면을 쓸 수 있어요"}><FullscreenIcon /></button>
         </div>
       )}
       <div className="game-screen-frame">{screen}</div>

@@ -34,6 +34,7 @@ p, h1, h2, .bubble, .post-text { word-break: keep-all; overflow-wrap: anywhere; 
 .round-button { width: 40px; height: 40px; flex: none; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--color-bg); color: var(--color-text); }
 .round-button.quiet { background: transparent; }
 .round-button:hover:not(:disabled), .round-button.is-active { background: var(--color-surface); }
+.round-button:disabled { opacity: 0.4; cursor: not-allowed; }
 .pill-button { min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--radius-pill); background: var(--color-bg); color: var(--color-text); font-size: var(--fs-body-sm); white-space: nowrap; }
 .pill-button:hover { background: var(--color-surface-raised); }
 .pill-button.is-liked { color: var(--heat); }
